@@ -56,7 +56,8 @@ export default function CourseMapInner({
       center={[41, -96]}
       zoom={4}
       minZoom={3}
-      scrollWheelZoom={false}
+      scrollWheelZoom
+      wheelPxPerZoomLevel={90}
       preferCanvas
       className="h-[460px] w-full"
       style={{ borderRadius: 14 }}
