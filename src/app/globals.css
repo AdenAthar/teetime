@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/*
+  teetime design tokens — mirrors Noteefy's app:
+  - crimson brand for the public directory / map
+  - Material-ish blue accents inside the account area
+*/
+:root {
+  --background: #f4f5f7;
+  --surface: #ffffff;
+  --foreground: #1a1a1a;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+
+  --crimson: #e11d2e;
+  --crimson-dark: #c0182a;
+  --crimson-tint: #fdecec;
+
+  --blue: #1976d2;
+  --blue-tint: #e8f1fb;
+  --toggle-on: #16385a;
+
+  --radius: 14px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-crimson: var(--crimson);
+  --color-crimson-dark: var(--crimson-dark);
+  --color-crimson-tint: var(--crimson-tint);
+  --color-blue: var(--blue);
+  --color-blue-tint: var(--blue-tint);
+  --color-toggle-on: var(--toggle-on);
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Leaflet is loaded from CSS import in the map component; base container sizing */
+.leaflet-container {
+  font: inherit;
+  border-radius: var(--radius);
+}
+
+.tt-bell-pin {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+@keyframes tt-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tt-fade-in {
+  animation: tt-fade-in 0.18s ease-out;
+}

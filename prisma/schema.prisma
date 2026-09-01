@@ -1,0 +1,144 @@
+// teetime schema — see ARCHITECTURE.md / DEPLOY.md
+//
+// Postgres (Neon, Vercel Postgres, Supabase, local Docker — all work).
+// Enums are modelled as validated strings and list fields as JSON strings, so the
+// schema also runs on SQLite unchanged if you set provider = "sqlite" and
+// DATABASE_URL = "file:./dev.db".
+//
+//   DATABASE_URL  pooled connection string (used by the app at runtime)
+//   DIRECT_URL    direct connection (used by `prisma db push` / migrations)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String    @unique
+  phone         String?
+  zip           String?
+  birthday      DateTime?
+  gender        String?
+  notifyEmail   Boolean   @default(true)
+  notifyText    Boolean   @default(true)
+  notifyPrompts Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  searches      Search[]
+  notifications Notification[]
+  sessions      Session[]
+}
+
+model Course {
+  id         String  @id @default(cuid())
+  name       String
+  slug       String  @unique
+  city       String?
+  region     String // state / province
+  country    String  @default("USA")
+  lat        Float
+  lng        Float
+  bookingUrl String?
+  provider   String? // simulated booking provider label
+
+  searches Search[]
+  teeTimes TeeTime[]
+
+  @@index([region])
+}
+
+/// status: ACTIVE | PAUSED | MATCHED | EXPIRED
+model Search {
+  id            String    @id @default(cuid())
+  userId        String
+  courseId      String
+  date          DateTime // calendar day being watched (00:00)
+  startMin      Int // minutes from midnight — window start (420 = 7:00am)
+  endMin        Int // window end (660 = 11:00am)
+  players       Int       @default(2)
+  holes         Int       @default(18)
+  status        String    @default("ACTIVE")
+  recurring     Boolean   @default(false)
+  daysOfWeek    String    @default("[]") // JSON array of 0-6, recurring only
+  createdAt     DateTime  @default(now())
+  lastCheckedAt DateTime?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course        Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+
+  @@index([userId])
+  @@index([courseId, date])
+  @@index([status])
+}
+
+/// status: OPEN | BOOKED
+model TeeTime {
+  id         String   @id @default(cuid())
+  courseId   String
+  teeAt      DateTime // full timestamp of the tee slot
+  players    Int      @default(4) // spots available when OPEN
+  priceCents Int      @default(6500)
+  holes      Int      @default(18)
+  status     String   @default("BOOKED")
+  updatedAt  DateTime @updatedAt
+
+  course        Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+
+  @@unique([courseId, teeAt])
+  @@index([courseId, teeAt])
+  @@index([status])
+}
+
+/// channel: EMAIL | TEXT
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  searchId  String
+  teeTimeId String
+  channel   String
+  subject   String
+  body      String
+  provider  String    @default("DEV") // DEV | RESEND | TWILIO
+  sentAt    DateTime  @default(now())
+  readAt    DateTime?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  search  Search  @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  teeTime TeeTime @relation(fields: [teeTimeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sentAt])
+}
+
+/// channel: EMAIL | TEXT
+model OtpToken {
+  id         String    @id @default(cuid())
+  identifier String // email or E.164 phone
+  channel    String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([identifier])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

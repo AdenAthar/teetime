@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: teetime-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: teetime
+      POSTGRES_PASSWORD: teetime
+      POSTGRES_DB: teetime
+    ports:
+      - "5432:5432"
+    volumes:
+      - teetime-pgdata:/var/lib/postgresql/data
+
+volumes:
+  teetime-pgdata:
