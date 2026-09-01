@@ -13,6 +13,13 @@ export const maxDuration = 60;
  *
  * If CRON_SECRET is set, require ?key=<secret> or an Authorization: Bearer header.
  */
+/** Parse an env var to int, ignoring missing OR empty-string values. */
+function envInt(name: string, fallback: number) {
+  const raw = process.env[name];
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 function authorized(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return true;
@@ -27,8 +34,8 @@ export async function POST(request: Request) {
   }
   await ensureSheetsForWatchedCourses(db);
   const result = await tick(db, {
-    cancels: Number(process.env.SIM_TICK_CANCELS ?? 4),
-    rebookings: Number(process.env.SIM_TICK_BOOKINGS ?? 5),
+    cancels: envInt("SIM_TICK_CANCELS", 4),
+    rebookings: envInt("SIM_TICK_BOOKINGS", 5),
   });
   return NextResponse.json({ ok: true, ...result });
 }

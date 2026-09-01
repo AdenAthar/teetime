@@ -15,7 +15,7 @@ import { dateAtMidnight } from "../src/lib/time";
 import { SEARCH_STATUS } from "../src/lib/constants";
 
 const db = new PrismaClient();
-const DAYS_AHEAD = Number(process.env.SIM_DAYS_AHEAD ?? 14);
+const DAYS_AHEAD = Number(process.env.SIM_DAYS_AHEAD) || 14;
 
 type Geo = Record<string, { lat: number; lng: number; source: string }>;
 
