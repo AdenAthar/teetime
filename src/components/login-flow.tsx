@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { startLogin } from "@/lib/auth/actions";
 import { VerifyForm } from "./verify-form";
+import { MailIcon, PhoneIcon } from "./icons";
 
 type Mode = "choose" | "email" | "phone";
 
@@ -56,13 +57,13 @@ export function LoginFlow() {
         onClick={() => setMode("email")}
         className="flex w-full items-center justify-center gap-2 rounded-md bg-crimson py-2.5 text-sm font-semibold text-white hover:bg-crimson-dark"
       >
-        ✉️ Log In With Email
+        <MailIcon className="h-4 w-4" /> Log In With Email
       </button>
       <button
         onClick={() => setMode("phone")}
         className="flex w-full items-center justify-center gap-2 rounded-md bg-crimson py-2.5 text-sm font-semibold text-white hover:bg-crimson-dark"
       >
-        📞 Log In With Phone Number
+        <PhoneIcon className="h-4 w-4" /> Log In With Phone Number
       </button>
     </div>
   );

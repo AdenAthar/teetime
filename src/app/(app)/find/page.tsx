@@ -21,7 +21,7 @@ export default async function FindPage() {
       </p>
 
       <div className="relative isolate z-0 mt-8 overflow-hidden rounded-[14px] border border-border">
-        <CourseMap pins={courses} />
+        <CourseMap pins={courses} signedIn={signedIn} />
       </div>
 
       <p className="mt-2 text-right text-xs text-muted">

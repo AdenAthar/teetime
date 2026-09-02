@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { completeLogin, resendCode } from "@/lib/auth/actions";
 
@@ -18,6 +18,14 @@ export function VerifyForm({
   const v = state as { error?: string };
   const r = resent as { devCode?: string };
   const shownCode = r.devCode ?? devCode;
+
+  // green "message sent" toast — shown on load and re-shown on resend (form onSubmit)
+  const [toast, setToast] = useState(true);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(false), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   return (
     <div className="text-center">
@@ -48,7 +56,7 @@ export function VerifyForm({
         </button>
       </form>
 
-      <form action={resendAction} className="mt-2">
+      <form action={resendAction} className="mt-2" onSubmit={() => setToast(true)}>
         <input type="hidden" name="identifier" value={identifier} />
         <input type="hidden" name="channel" value={channel} />
         <button className="w-full rounded-md border border-border py-2.5 text-sm font-semibold hover:bg-background">
@@ -63,6 +71,20 @@ export function VerifyForm({
         </Link>
         .
       </p>
+
+      {toast && (
+        <div className="tt-fade-in fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-md bg-green-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-white/25">✓</span>
+          Verification message sent.
+          <button
+            onClick={() => setToast(false)}
+            aria-label="Dismiss"
+            className="ml-1 text-white/80 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
