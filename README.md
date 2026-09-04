@@ -37,6 +37,13 @@ npm run tick             # 2nd terminal — churns the tee sheet so alerts fire
 - Dev shortcut to the demo account: visit `/api/dev/login` (disabled in production).
 - Every alert lands in **`/dev/outbox`**; hit "Run simulator once" there to force a tick.
 
+### Stopping the dev server
+
+`npm run stop` kills only the process on port 3000. Use it instead of a blanket
+`taskkill /IM node.exe` (which also kills any other Node/Electron apps running on
+the machine). To verify a production build while dev might be up, `npm run
+build:app` skips `prisma generate` so it doesn't fight the Windows DLL lock.
+
 ### Local Postgres or SQLite instead of Neon
 
 ```bash

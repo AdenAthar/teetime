@@ -5,8 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "build:app": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "stop": "node scripts/stop-dev.mjs",
     "postinstall": "prisma generate",
     "db:up": "docker-compose up -d",
     "db:push": "prisma db push",
