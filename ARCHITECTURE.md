@@ -29,9 +29,11 @@ captures golfer demand that would otherwise leak to a competitor.
 Noteefy's real value is the **live integrations with tee-sheet providers**. Those are
 proprietary and unreplicable. So the central move is a **fake tee-sheet provider**:
 
-- `src/lib/simulator/engine.ts` seeds a realistic 14-day tee sheet per course
+- `src/lib/simulator/engine.ts` generates a realistic tee sheet on demand
   (10-min slots, 06:00–18:00, price curve by time of day, ~65% booked; further-out
-  days start with more availability).
+  days start with more availability). Sheets are created lazily — only for courses
+  with an active search, and only for the days around it — so a hosted Postgres
+  stays small. `FULL_SHEETS=1 npm run db:seed` pre-generates all ~1M for local dev.
 - A **churn tick** flips booked↔open slots over time to model bookings and
   cancellations, plus a biased "targeted cancellation" that opens a slot inside a
   random active search's window so demos actually produce hits.
@@ -50,7 +52,7 @@ unreplicable piece is faked.
 Next.js 16 (App Router) — one deployable
   routes (RSC)                server actions / route handlers
   /find    map + directory     auth:    request-otp, verify-otp, dev/login
-  /searches  My Searches       searches: create / pause / delete / reactivate
+  /searches  My Searches       searches: create / stop-notifications / delete / reactivate
   /account/{profile,           account:  update profile, toggle prefs, delete
             notifications,     /api/tick: crank the simulator (+ GET status)
             settings}
@@ -58,8 +60,8 @@ Next.js 16 (App Router) — one deployable
   /dev/outbox  sent alerts
         │                                   │
         ▼                                   ▼
-  Prisma 6 → SQLite (default)         Tee-sheet simulator
-  (Postgres = 1-line switch)          seed · churn tick · matcher
+  Prisma 6 → Postgres (Neon)          Tee-sheet simulator
+  (SQLite = 1-line schema switch)     seed · churn tick · matcher
   User Course Search TeeTime                 │
   Notification OtpToken Session              ▼
                                      Notifier → Resend if keyed
@@ -74,11 +76,11 @@ Next.js 16 (App Router) — one deployable
 |---|---|---|---|
 | 1 | **Supply data** | real integrations / simulate | **Simulate.** No alternative; it's what makes the rest real. |
 | 2 | **Simulator runtime** | long-lived worker / serverless cron / lazy on page-load | **`/api/tick` + a `npm run tick` loop.** No second process to babysit in dev; deploys to Vercel Cron unchanged. Lazy-on-load would make "live" alerts a fiction. |
-| 3 | **Map library** | Google Maps JS / Leaflet+OSM / MapLibre | **Leaflet + OpenStreetMap tiles.** Noteefy embeds a Google *My Maps* iframe; the Google JS API needs a billed key. Leaflet is keyless and gives full control of the markers + detail panel. First tried Carto Voyager tiles — they now watermark "API KEY REQUIRED" — so swapped to raw `tile.openstreetmap.org`. |
-| 4 | **Marker rendering** | 1,000 DOM `divIcon` bell pins / canvas circle markers / clustering | **Canvas `CircleMarker`s on one shared `L.canvas()` renderer** (`preferCanvas`). 1,000 DOM nodes made pan/zoom janky; one `<canvas>` is smooth. Tradeoff: dots not bells at continental zoom (near-identical at that scale); the detailed bell pin still shows for a focused course. Clustering was rejected — the real map doesn't cluster. |
+| 3 | **Map library** | Google Maps JS / Leaflet+OSM / MapLibre | **Leaflet + OpenStreetMap tiles.** Noteefy embeds a Google *My Maps* iframe; the Google JS API needs a billed key. Leaflet is keyless and lets us rebuild the Noteefy interaction ourselves — click a pin → red course bar + slide-in detail panel, plus a geolocate-on-load and a "locate me" control. First tried Carto Voyager tiles — they now watermark "API KEY REQUIRED" — so swapped to raw `tile.openstreetmap.org`. |
+| 4 | **Marker rendering** | 1,000 DOM `divIcon` bell pins / canvas circle markers / clustering | **Zoom-dependent hybrid.** Below zoom 6: every course as a canvas dot on one shared `L.canvas()` renderer (`preferCanvas`) — smooth at continental scale. Zoom 6+: only the courses in the current viewport, as `divIcon` bell pins, capped at 250 and recomputed on `moveend`/`zoomend`. Started with canvas dots everywhere; added the viewport-culled bells back to match Noteefy's pin look up close. Clustering was rejected — the real map doesn't cluster. |
 | 5 | **Map stacking** | default z-index / raise header + isolate map | Leaflet panes/controls use z-index up to ~1000 and bled over the header menu. **Header lifted to z-1200, map wrapped in `isolate z-0`.** |
 | 6 | **Course coordinates** | geocode all / state-centroid approximation / hand-curate | **Geocode once via OSM Nominatim** (1 req/s, ~17 min, cached to `data/geocache.json`): 503 exact hits, 350 fall back to state-centroid + deterministic jitter. Real pins matter for a map product. Known issue: a few coastal centroids land in water. |
-| 7 | **Database** | Postgres / SQLite | You asked for Postgres; Docker Desktop wasn't running and I can't start a GUI app. **Shipped on Prisma + SQLite** (runs instantly) with `docker-compose.yml` + a one-line schema switch to Postgres. To stay portable: enums modelled as validated strings, the one list field (`daysOfWeek`) as a JSON string. |
+| 7 | **Database** | Postgres / SQLite | **Postgres, on Neon's free tier** — one hosted DB shared by local dev and the Vercel deployment. Built first on SQLite (Docker wasn't running at the time) and switched to Postgres during deploy; the schema still runs on SQLite by changing `provider` back to `"sqlite"` and the URL to a file, because enums are modelled as validated strings and the one list field (`daysOfWeek`) as a JSON string. `docker-compose.yml` is kept for a local Postgres option. |
 | 8 | **ORM version** | Prisma 7 / Prisma 6 | `create-next-app` pulled Prisma 7, whose new driver-adapter + config-file + query-compiler model added friction on a greenfield build. **Downgraded to Prisma 6** for the well-trodden setup. |
 | 9 | **Notifications** | real email + SMS / dev outbox | **Dev Outbox by default** — writes every alert to the DB and renders it at `/dev/outbox` + inline on the search card. Real email if `RESEND_API_KEY` is set. SMS stubbed (Twilio needs a paid number + A2P registration). Zero-config runnable. |
 | 10 | **Auth** | NextAuth / Clerk / hand-rolled OTP | **Hand-rolled OTP → `jose`-signed session cookie**, matching Noteefy's real passwordless flow, no external dependency. Dev prints the code to the console and shows it on the verify screen; `/api/dev/login` shortcuts to the demo account. A `Session` row backs the JWT so sessions can be revoked. |
@@ -106,7 +108,8 @@ OtpToken  id, identifier, channel, codeHash (sha256), expiresAt, consumedAt?, cr
 Session   id, userId, expiresAt, createdAt
 ```
 
-Enums are strings (SQLite/Postgres portability); constants live in `src/lib/constants.ts`.
+Enums are strings and `daysOfWeek` is a JSON string, so the schema is portable
+between Postgres and SQLite; constants live in `src/lib/constants.ts`.
 
 ---
 
@@ -123,17 +126,23 @@ Enums are strings (SQLite/Postgres portability); constants live in `src/lib/cons
 
 ## 7. Run
 
+Needs a Postgres URL in `.env` (`DATABASE_URL` + `DIRECT_URL`) — a free Neon
+project works for both local dev and prod. See `DEPLOY.md`.
+
 ```bash
 npm install
-npm run db:push          # SQLite schema
-npm run db:seed          # ~1,000 courses + 14 days of tee sheets + demo user
+npm run db:push          # create the schema in Postgres
+npm run db:seed          # ~1,000 courses + demo user (tee sheets generate lazily)
 npm run dev              # http://localhost:3000
 npm run tick             # 2nd terminal — churns availability so alerts fire
 
 # optional
-docker compose up -d     # + set provider="postgresql" in prisma/schema.prisma
 npm run geocode          # refresh data/geocache.json (or `-- --offline` for centroids)
 ```
+
+Local Postgres instead of Neon: `docker compose up -d` and point `DATABASE_URL`
+at it. SQLite instead: set `provider = "sqlite"` in `prisma/schema.prisma` and
+`DATABASE_URL="file:./dev.db"`.
 
 Visit `/api/dev/login` for the demo account; hit "Run simulator once" on `/dev/outbox`
 to watch an alert get generated, matched and "sent".

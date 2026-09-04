@@ -25,8 +25,9 @@ export default function FaqPage() {
       </p>
       <h2>How do I stop getting alerts?</h2>
       <p>
-        Pause or delete any search from <a href="/searches">My Searches</a>, or turn channels
-        off entirely under <a href="/account/notifications">Notification Preferences</a>.
+        Hit <em>Stop Notifications</em> on any search from{" "}
+        <a href="/searches">My Searches</a> (or delete it), or turn channels off entirely under{" "}
+        <a href="/account/notifications">Notification Preferences</a>.
       </p>
     </ContentPage>
   );

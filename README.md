@@ -12,33 +12,37 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design and the tradeoffs.
 ## Stack
 
 - Next.js 16 (App Router, RSC + server actions) · React 19
-- Prisma 6 · SQLite by default (one-line switch to Postgres — see `prisma/schema.prisma`)
+- Prisma 6 · **Postgres** (a free Neon project; one-line switch to SQLite — see `prisma/schema.prisma`)
 - Leaflet + OpenStreetMap tiles (no API key)
 - `jose` for the passwordless session cookie
 - Tailwind v4
 
 ## Run it
 
+Put a Postgres URL in `.env` first — `DATABASE_URL` (pooled) and `DIRECT_URL`
+(direct). A free [Neon](https://neon.tech) project covers both local dev and
+production; full walkthrough in [`DEPLOY.md`](./DEPLOY.md).
+
 ```bash
 npm install
-npm run db:push          # create the SQLite schema
-npm run db:seed          # seed ~1,000 courses + 14 days of tee sheets + a demo user
+npm run db:push          # create the schema in Postgres
+npm run db:seed          # seed ~1,000 courses + a demo user (tee sheets generate lazily)
 
 npm run dev              # http://localhost:3000
 npm run tick             # 2nd terminal — churns the tee sheet so alerts fire
 ```
 
 - Sign in with any email/phone — the OTP code is printed to the dev server console
-  and shown on the verify screen.
-- Dev shortcut to the demo account: visit `/api/dev/login`.
+  and shown on the verify screen. Or use the **"Explore the demo"** button on `/login`.
+- Dev shortcut to the demo account: visit `/api/dev/login` (disabled in production).
 - Every alert lands in **`/dev/outbox`**; hit "Run simulator once" there to force a tick.
 
-### Optional: real Postgres
+### Local Postgres or SQLite instead of Neon
 
 ```bash
-docker compose up -d
-# in prisma/schema.prisma set: provider = "postgresql"
-# in .env set the postgres DATABASE_URL (commented example is there)
+docker compose up -d                       # local Postgres, then point DATABASE_URL at it
+# — or SQLite: set provider = "sqlite" in prisma/schema.prisma
+#              and DATABASE_URL="file:./dev.db"
 npm run db:push && npm run db:seed
 ```
 
@@ -57,7 +61,8 @@ pins by state centroid only.
 
 ```
 src/
-  app/(app)/      find · searches · account/* · dev/outbox   (+ shared header/footer)
+  app/(app)/      find · searches · account/* · dev/outbox
+                  faq · support · accessibility · legal/*     (+ shared header/footer)
   app/(auth)/     login · verify · signup                    (full-bleed layout)
   app/api/        tick (simulator crank) · dev/login
   lib/

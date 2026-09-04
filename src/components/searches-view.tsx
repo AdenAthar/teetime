@@ -168,7 +168,7 @@ function SearchCard({ s }: { s: SearchVM }) {
             disabled={pending}
             className="rounded-full border border-border px-3 py-1.5 font-medium"
           >
-            {s.status === "PAUSED" ? "Resume" : "Pause"}
+            {s.status === "PAUSED" ? "Resume Notifications" : "Stop Notifications"}
           </button>
         )}
         <button
