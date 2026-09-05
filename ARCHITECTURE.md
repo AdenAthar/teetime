@@ -122,6 +122,12 @@ between Postgres and SQLite; constants live in `src/lib/constants.ts`.
 - ~350 courses are placed by state centroid, not exact address; a few land in water.
 - SMS is recorded but not delivered.
 - Auth-page background is generated art, not Noteefy's photo.
+- No real per-course timezone — all day/window math is UTC. (This *used* to be
+  local-server-time, which is worse: it silently broke matching for any data
+  seeded from a machine in a different timezone than wherever the code runs.
+  Fixed by switching `time.ts` to explicit UTC methods everywhere — see git
+  history for the incident. UTC-for-everyone is a known simplification, not a
+  bug; local-time-per-process was the bug.)
 
 ---
 
