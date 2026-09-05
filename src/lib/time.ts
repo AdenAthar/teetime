@@ -1,6 +1,10 @@
 // Small time helpers shared by the simulator and UI.
-// Tee times are stored as absolute timestamps; "day" comparisons use the local
-// server day. Good enough for a demo (real Noteefy keys off course timezone).
+// Tee times are stored as absolute timestamps; "day" and time-of-day math is
+// always done in UTC — never the running process's local timezone. Two
+// processes computing "midnight" for the same instant must agree regardless
+// of which machine/timezone they run in (dev laptop vs. a UTC serverless
+// function), or window boundaries silently drift between them.
+// (Real per-course timezone is still out of scope — good enough for a demo.)
 
 export const SLOT_INTERVAL_MIN = 10;
 export const DAY_START_MIN = 6 * 60; // 06:00
@@ -16,25 +20,25 @@ export function minutesToLabel(min: number): string {
 
 export function dateAtMidnight(d: Date): Date {
   const c = new Date(d);
-  c.setHours(0, 0, 0, 0);
+  c.setUTCHours(0, 0, 0, 0);
   return c;
 }
 
 export function minutesFromMidnight(d: Date): number {
-  return d.getHours() * 60 + d.getMinutes();
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
 export function combineDayAndMinutes(day: Date, minutes: number): Date {
   const c = dateAtMidnight(day);
-  c.setMinutes(minutes);
+  c.setUTCMinutes(minutes);
   return c;
 }
 
-export function sameLocalDay(a: Date, b: Date): boolean {
+export function sameUtcDay(a: Date, b: Date): boolean {
   return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth() &&
+    a.getUTCDate() === b.getUTCDate()
   );
 }
 

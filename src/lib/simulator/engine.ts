@@ -7,7 +7,7 @@ import {
   combineDayAndMinutes,
   dateAtMidnight,
   minutesFromMidnight,
-  sameLocalDay,
+  sameUtcDay,
 } from "@/lib/time";
 import { sendAlert } from "@/lib/notify";
 import { seededUnit } from "@/lib/rand";
@@ -114,7 +114,7 @@ export async function ensureAllSheets(db: PrismaClient, daysAhead: number) {
   const today = dateAtMidnight(new Date());
   for (let d = 0; d < daysAhead; d++) {
     const day = new Date(today);
-    day.setDate(day.getDate() + d);
+    day.setUTCDate(day.getUTCDate() + d);
     for (const c of courses) {
       if (!(await hasSheet(db, c.id, day))) await ensureSheet(db, c, day, { daysOut: d });
     }
@@ -242,7 +242,7 @@ export async function runMatcher(
   let matches = 0;
   let notifications = 0;
   for (const search of searches) {
-    if (!sameLocalDay(search.date, teeTime.teeAt)) continue;
+    if (!sameUtcDay(search.date, teeTime.teeAt)) continue;
     const already = await db.notification.findFirst({
       where: { searchId: search.id, teeTimeId: teeTime.id },
       select: { id: true },

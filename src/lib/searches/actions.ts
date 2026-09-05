@@ -39,7 +39,7 @@ export async function createSearch(_prev: Result, form: FormData): Promise<Resul
   const d = parsed.data;
   if (d.endMin <= d.startMin) return { ok: false, error: "End time must be after start time." };
 
-  const day = dateAtMidnight(new Date(d.date + "T00:00:00"));
+  const day = dateAtMidnight(new Date(d.date + "T00:00:00Z"));
   const recurring = d.recurring === "on";
 
   const course = await db.course.findUnique({

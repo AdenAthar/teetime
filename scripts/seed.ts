@@ -91,7 +91,7 @@ async function main() {
   const today = dateAtMidnight(new Date());
   const inDays = (n: number) => {
     const d = new Date(today);
-    d.setDate(d.getDate() + n);
+    d.setUTCDate(d.getUTCDate() + n);
     return d;
   };
 
