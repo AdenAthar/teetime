@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { createSearch } from "@/lib/searches/actions";
 import { minutesToLabel } from "@/lib/time";
@@ -33,17 +34,28 @@ export function CreateSearchDialog({
   const minDate = today.toISOString().slice(0, 10);
   const maxDate = new Date(today.getTime() + 13 * 86_400_000).toISOString().slice(0, 10);
 
+  // Lock body scroll + close on Escape while open.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
   }, [onClose]);
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  // Portal to <body> so the modal escapes the map's `isolate` stacking context
+  // (which otherwise paints it behind Leaflet's tiles/controls). z above the
+  // sticky header (z-1200) and Leaflet controls (z-1000).
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[1px]"
       onClick={onClose}
     >
       <div
@@ -203,6 +215,7 @@ export function CreateSearchDialog({
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
