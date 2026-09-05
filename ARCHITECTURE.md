@@ -7,26 +7,32 @@ challenge. Same product shape, same visual language, new name + logo.
 
 ## 1. The product
 
-Stripping away Noteefy's marketing site, the app is a **demand-capture alerting system**:
+The real company sells a few products. After researching them, what this app
+recreates is **Confirm** — pre-round confirmation and cancellation recapture —
+*not* Waitlist (their separate always-on golfer search-and-notify product).
 
-1. A directory of ~1,000 partner golf courses, grouped by state/province, with a map.
-2. A golfer creates a **search**: course + date + time window + party size (+ optional
-   recurring weekly searches).
-3. A monitoring engine watches each course's tee sheet via booking-provider
-   integrations (GolfNow, foreUp, Club Prophet, TeeSnap, Lightspeed/Chronogolf…).
-4. When a slot matching an active search opens up — almost always a *cancellation* —
-   the golfer gets an email/SMS with a booking link.
-5. Account surface: profile, notification preferences (email/text toggles), searches
-   list (all / recurring), delete account. Auth is passwordless (email or phone OTP).
+**Confirm (primary):** a course has a tee sheet full of real bookings. 24–48 h
+before each booking, the system messages that golfer to **confirm, cancel, or
+modify**. If they cancel — or never respond by a cutoff a few hours before
+tee-off — that slot is released *immediately*, and only then does the
+Waitlist-style matcher fill it from other golfers' searches. Revenue logic:
+courses lose money on no-shows and late cancellations; Confirm surfaces them
+early enough to resell the slot.
 
-Revenue logic: courses lose money on unfilled cancellations; Noteefy refills them and
-captures golfer demand that would otherwise leak to a competitor.
+**Waitlist (secondary, retained):** a golfer creates a **search** (course +
+date + time window + party size, optionally recurring). When a slot matching an
+active search opens up, the golfer gets an email/SMS with a booking link. This
+still exists as a real, useful mechanic in its own right — and it's the thing
+that *refills* a slot the moment Confirm frees one.
+
+Supporting surface: a ~1,000-course directory + map, account/profile,
+notification preferences, searches list. Auth is passwordless (email or phone OTP).
 
 ---
 
 ## 2. The load-bearing decision — simulate the supply side
 
-Noteefy's real value is the **live integrations with tee-sheet providers**. Those are
+The real value is **live integrations with tee-sheet providers**. Those are
 proprietary and unreplicable. So the central move is a **fake tee-sheet provider**:
 
 - `src/lib/simulator/engine.ts` generates a realistic tee sheet on demand
@@ -34,12 +40,21 @@ proprietary and unreplicable. So the central move is a **fake tee-sheet provider
   days start with more availability). Sheets are created lazily — only for courses
   with an active search, and only for the days around it — so a hosted Postgres
   stays small. `FULL_SHEETS=1 npm run db:seed` pre-generates all ~1M for local dev.
-- A **churn tick** flips booked↔open slots over time to model bookings and
-  cancellations, plus a biased "targeted cancellation" that opens a slot inside a
-  random active search's window so demos actually produce hits.
-- Everything downstream is **real code**: the matcher queries active searches against
-  each newly-opened slot; the notifier fans the hit out across the user's channels;
-  the search moves to `MATCHED`; the alert is recorded and rendered.
+- A **churn tick** (`tick()`, cranked by `/api/tick`) does, in order:
+  1. **Confirm — send nudges:** any `TeeTime` with a real golfer attached
+     (`bookedByUserId` set, `confirmStatus: PENDING`) that's now 24–48 h out gets
+     a "please confirm" notification and moves to `AWAITING_CONFIRMATION`.
+  2. **Confirm — auto-release:** an `AWAITING_CONFIRMATION` booking still
+     unanswered within 3 h of tee-off is released (`status: OPEN`), same as an
+     explicit cancel, then handed to the matcher.
+  3. **Waitlist churn:** flips booked↔open slots to model ambient bookings and
+     cancellations, plus a biased "targeted cancellation" inside a random active
+     search's window so demos produce hits.
+- Everything downstream is **real code**: `runMatcher` queries active searches
+  against each newly-opened slot (whether Confirm or Waitlist freed it); the
+  notifier fans the hit out; the search moves to `MATCHED`; the alert is recorded.
+- The golfer's confirm / cancel / modify link (`/confirm/[token]`, token-gated,
+  no login) drives the same `runMatcher` path on cancel/modify.
 
 This keeps the interesting ~80% of the system genuine and observable while the one
 unreplicable piece is faked.
@@ -57,12 +72,13 @@ Next.js 16 (App Router) — one deployable
             notifications,     /api/tick: crank the simulator (+ GET status)
             settings}
   /login /verify /signup
-  /dev/outbox  sent alerts
+  /confirm/[token]  golfer confirm / cancel / modify (token-gated)
+  /dev/outbox  sent alerts (Waitlist + Confirm)
         │                                   │
         ▼                                   ▼
   Prisma 6 → Postgres (Neon)          Tee-sheet simulator
   (SQLite = 1-line schema switch)     seed · churn tick · matcher
-  User Course Search TeeTime                 │
+  User Course Search TeeTime                 │  confirm nudges + auto-release
   Notification OtpToken Session              ▼
                                      Notifier → Resend if keyed
                                               else Dev Outbox (DB + /dev/outbox)
@@ -90,6 +106,7 @@ Next.js 16 (App Router) — one deployable
 | 14 | **Auth-page background** | licensed course photo / generated | **CSS gradient + SVG hills.** Avoids shipping a copyrighted image; reads as a course at golden hour. |
 | 15 | **Header on scroll** | always-sticky / hide-on-scroll-down | **Hide-on-scroll-down, reveal-on-scroll-up** (`header-shell.client.tsx`, rAF-throttled, always shown above 80px). |
 | 16 | **Mouse-wheel over the map** | always-on scroll-zoom / ctrl+scroll gate / click-to-activate | **Click-to-activate ("cooperative gesture handling")** — the same convention Google Maps embeds default to (that "©2026 Google" attribution on Noteefy's map is the tell). Scroll-zoom stays off until you click into the map; a plain scroll before that just scrolls the page (never trapped, header hide-on-scroll unaffected); moving the cursor off the map re-disarms it. Tried always-on plain scroll first — it reproduces Noteefy's *end state* but traps any scroll gesture that starts over the map, which sits right under the header, so it kept reading as "scrolling is broken." Also tried ctrl+scroll, which solves the trap but isn't what Noteefy's real embed requires. |
+| 17 | **Primary mechanic: Confirm vs Waitlist** | model the golfer-initiated always-on search (Waitlist) / model pre-round confirmation + automatic recapture (Confirm) | **Confirm, with Waitlist retained as the refill mechanic.** The first build was pure Waitlist — a golfer sets a search and waits for a slot to open. But researching the real product line, the mechanics I'd actually built (a course-side tee sheet, cancellations freeing slots, notifications firing on the *transition*) map to **Confirm**: the course proactively nudges each booked golfer 24–48 h out; a cancel or a non-response releases the slot; only *then* does search-matching fill it. Confirm is course-initiated and booking-attached (`TeeTime.bookedByUserId` + `confirmStatus`); Waitlist is golfer-initiated and search-attached (`Search`). Modelled Confirm as the primary flow and kept Waitlist because (a) it's a real second product and (b) it's literally what recaptures the freed slot. Modelling booking-ownership as fields on `TeeTime` rather than a separate `Booking` table was deliberate — smaller, reviewable diff, and a slot only ever has one holder. |
 
 ---
 
@@ -101,10 +118,14 @@ User      id, firstName, lastName, email(unique), phone?, zip?, birthday?, gende
 Course    id, name, slug(unique), city?, region, country, lat, lng, bookingUrl?, provider?
 Search    id, userId, courseId, date, startMin, endMin, players, holes,
           status "ACTIVE|PAUSED|MATCHED|EXPIRED", recurring, daysOfWeek (json), createdAt, lastCheckedAt
-TeeTime   id, courseId, teeAt, players, priceCents, holes, status "OPEN|BOOKED", updatedAt
+TeeTime   id, courseId, teeAt, players, priceCents, holes, status "OPEN|BOOKED", updatedAt,
+          -- Confirm: null unless a real golfer holds this slot --
+          bookedByUserId?, confirmStatus? "PENDING|AWAITING_CONFIRMATION|CONFIRMED|CANCELED|MODIFY_REQUESTED",
+          confirmToken?(unique), confirmRequestedAt?, confirmRespondedAt?
           @@unique(courseId, teeAt)
-Notification id, userId, searchId, teeTimeId, channel "EMAIL|TEXT", subject, body,
-          provider "DEV|RESEND|TWILIO", sentAt, readAt?
+Notification id, userId, searchId?, teeTimeId, channel "EMAIL|TEXT",
+          kind "MATCH|CONFIRM_REQUEST" (searchId null when CONFIRM_REQUEST),
+          subject, body, provider "DEV|RESEND|TWILIO", sentAt, readAt?
 OtpToken  id, identifier, channel, codeHash (sha256), expiresAt, consumedAt?, createdAt
 Session   id, userId, expiresAt, createdAt
 ```
@@ -122,6 +143,9 @@ between Postgres and SQLite; constants live in `src/lib/constants.ts`.
 - ~350 courses are placed by state centroid, not exact address; a few land in water.
 - SMS is recorded but not delivered.
 - Auth-page background is generated art, not Noteefy's photo.
+- **Confirm** is scoped: one fixed auto-release cutoff (3 h), non-configurable
+  reminder timing, `confirmToken` never expires, and "modify" is simplified to
+  "release the slot + go set up a Waitlist search" rather than true rescheduling.
 - No real per-course timezone — all day/window math is UTC. (This *used* to be
   local-server-time, which is worse: it silently broke matching for any data
   seeded from a machine in a different timezone than wherever the code runs.

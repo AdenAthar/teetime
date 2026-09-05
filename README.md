@@ -3,9 +3,12 @@
 A working recreation of the Noteefy golfer app (`noteefy.app/timesearch`) — same
 product, same visual language, different name and logo. Built as a challenge.
 
-**What it does:** golfers create *searches* (course + date + time window + party
-size); a simulated tee-sheet engine churns availability; when a matching slot opens
-up, an alert is sent (Dev Outbox by default, real email if configured).
+**What it does:** recreates the **Confirm** product — pre-round confirmation and
+cancellation recapture. A simulated tee-sheet engine nudges booked golfers 24–48 h
+out to confirm / cancel / modify (`/confirm/[token]`); a cancel or non-response
+releases the slot, which the retained **Waitlist** flow (golfer *searches* — course
++ date + window + party size) then refills. Notifications land in the Dev Outbox by
+default, real email if configured.
 
 See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design and the tradeoffs.
 
@@ -70,12 +73,13 @@ pins by state centroid only.
 src/
   app/(app)/      find · searches · account/* · dev/outbox
                   faq · support · accessibility · legal/*     (+ shared header/footer)
-  app/(auth)/     login · verify · signup                    (full-bleed layout)
+  app/(auth)/     login · verify · signup · confirm/[token]   (full-bleed layout)
   app/api/        tick (simulator crank) · dev/login
   lib/
     auth/         OTP + jose session
-    simulator/    tee-sheet generation, churn tick, matcher
-    notify/       channel fan-out (Resend | Dev)
+    simulator/    tee-sheet gen, churn tick, matcher, Confirm nudges + auto-release
+    notify/       channel fan-out (Resend | Dev) — Waitlist alerts + Confirm nudges
+    confirm/      golfer confirm / cancel / modify actions
     searches/ account/   server actions
   components/     site chrome, map, directory, dialogs, account screens
 scripts/          seed · geocode · tick-loop · shots (Playwright)

@@ -1,5 +1,13 @@
 import type { PrismaClient } from "@prisma/client";
-import { SEARCH_STATUS, TEE_STATUS, BOOKING_PROVIDERS } from "@/lib/constants";
+import {
+  SEARCH_STATUS,
+  TEE_STATUS,
+  BOOKING_PROVIDERS,
+  CONFIRM_STATUS,
+  CONFIRM_ASK_MIN_HOURS,
+  CONFIRM_ASK_MAX_HOURS,
+  CONFIRM_AUTO_RELEASE_WITHIN_HOURS,
+} from "@/lib/constants";
 import {
   DAY_START_MIN,
   DAY_END_MIN,
@@ -9,7 +17,7 @@ import {
   minutesFromMidnight,
   sameUtcDay,
 } from "@/lib/time";
-import { sendAlert } from "@/lib/notify";
+import { sendAlert, sendConfirmationRequest } from "@/lib/notify";
 import { seededUnit } from "@/lib/rand";
 
 /** Price curve: prime AM and twilight are cheaper-to-pricier by time of day. */
@@ -126,6 +134,7 @@ type TickResult = {
   rebookings: number;
   matches: number;
   notifications: number;
+  confirmationsSent: number;
 };
 
 /**
@@ -140,7 +149,22 @@ export async function tick(
 ): Promise<TickResult> {
   const now = new Date();
   const horizon = new Date(now.getTime() + 14 * 86_400_000);
-  const res: TickResult = { cancellations: 0, rebookings: 0, matches: 0, notifications: 0 };
+  const res: TickResult = {
+    cancellations: 0,
+    rebookings: 0,
+    matches: 0,
+    notifications: 0,
+    confirmationsSent: 0,
+  };
+
+  // --- Confirm: pre-round nudges + auto-release of unanswered bookings ---
+  // Runs first so a booking that's about to be auto-released still gets a
+  // chance to be picked up by the same tick's Waitlist matching below.
+  res.confirmationsSent += await sendConfirmationRequests(db, now);
+  const released = await autoReleaseUnconfirmedBookings(db, now);
+  res.cancellations += released.released;
+  res.matches += released.matches;
+  res.notifications += released.notifications;
 
   // --- cancellations ---
   const booked = await db.teeTime.findMany({
@@ -258,6 +282,77 @@ export async function runMatcher(
     });
   }
   return { matches, notifications };
+}
+
+/**
+ * Confirm: find real bookings (TeeTime rows with a golfer attached via
+ * bookedByUserId) inside the 24-48h pre-round window that haven't been asked
+ * yet, send the "please confirm" nudge, and mark them awaiting a response.
+ */
+export async function sendConfirmationRequests(db: PrismaClient, now = new Date()): Promise<number> {
+  const windowStart = new Date(now.getTime() + CONFIRM_ASK_MIN_HOURS * 3_600_000);
+  const windowEnd = new Date(now.getTime() + CONFIRM_ASK_MAX_HOURS * 3_600_000);
+
+  const due = await db.teeTime.findMany({
+    where: {
+      bookedByUserId: { not: null },
+      confirmStatus: CONFIRM_STATUS.PENDING,
+      teeAt: { gte: windowStart, lte: windowEnd },
+    },
+    include: { course: true, bookedBy: true },
+    take: 20,
+  });
+
+  let sent = 0;
+  for (const t of due) {
+    if (!t.bookedBy) continue;
+    const token = globalThis.crypto.randomUUID();
+    await db.teeTime.update({
+      where: { id: t.id },
+      data: {
+        confirmStatus: CONFIRM_STATUS.AWAITING_CONFIRMATION,
+        confirmToken: token,
+        confirmRequestedAt: now,
+      },
+    });
+    await sendConfirmationRequest(db, { teeTime: t, user: t.bookedBy, token });
+    sent++;
+  }
+  return sent;
+}
+
+/**
+ * Confirm: a booking that never got a response and is now within a few hours
+ * of tee-off is auto-released — same as an explicit cancel, just golfer-silent.
+ * The freed slot immediately feeds the existing Waitlist matcher.
+ */
+export async function autoReleaseUnconfirmedBookings(db: PrismaClient, now = new Date()) {
+  const deadline = new Date(now.getTime() + CONFIRM_AUTO_RELEASE_WITHIN_HOURS * 3_600_000);
+
+  const stale = await db.teeTime.findMany({
+    where: {
+      confirmStatus: CONFIRM_STATUS.AWAITING_CONFIRMATION,
+      teeAt: { gt: now, lte: deadline },
+    },
+    include: { course: true },
+    take: 20,
+  });
+
+  let released = 0;
+  let matches = 0;
+  let notifications = 0;
+  for (const t of stale) {
+    const opened = await db.teeTime.update({
+      where: { id: t.id },
+      data: { status: TEE_STATUS.OPEN, confirmStatus: CONFIRM_STATUS.CANCELED },
+      include: { course: true },
+    });
+    released++;
+    const m = await runMatcher(db, opened);
+    matches += m.matches;
+    notifications += m.notifications;
+  }
+  return { released, matches, notifications };
 }
 
 export function providerForSlug(slug: string): string {

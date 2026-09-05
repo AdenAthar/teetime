@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import { TickButton } from "@/components/tick-button";
-import { TEE_STATUS } from "@/lib/constants";
+import { TEE_STATUS, NOTIFICATION_KIND } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,10 @@ export default async function OutboxPage() {
       where: user ? { userId: user.id } : {},
       orderBy: { sentAt: "desc" },
       take: 50,
-      include: { search: { include: { course: { select: { name: true } } } } },
+      include: {
+        search: { include: { course: { select: { name: true } } } },
+        teeTime: { include: { course: { select: { name: true } } } },
+      },
     }),
     db.teeTime.count({ where: { status: TEE_STATUS.OPEN } }),
     db.teeTime.count({ where: { status: TEE_STATUS.BOOKED } }),
@@ -40,12 +43,23 @@ export default async function OutboxPage() {
             , then run the simulator a few times.
           </li>
         )}
-        {notifications.map((n) => (
+        {notifications.map((n) => {
+          const courseName = n.search?.course.name ?? n.teeTime.course.name;
+          const isConfirm = n.kind === NOTIFICATION_KIND.CONFIRM_REQUEST;
+          return (
           <li key={n.id} className="rounded-xl border border-border bg-surface p-4">
             <div className="flex items-center justify-between text-xs text-muted">
               <span>
-                {n.channel} · {n.provider} ·{" "}
-                {n.search.course.name}
+                <span
+                  className={
+                    isConfirm
+                      ? "font-semibold text-crimson"
+                      : "font-semibold text-blue"
+                  }
+                >
+                  {isConfirm ? "CONFIRM" : "WAITLIST"}
+                </span>{" "}
+                · {n.channel} · {n.provider} · {courseName}
               </span>
               <span>{n.sentAt.toLocaleString()}</span>
             </div>
@@ -54,7 +68,8 @@ export default async function OutboxPage() {
               {n.body}
             </pre>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

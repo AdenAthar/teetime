@@ -12,7 +12,7 @@ import { parseCourses } from "./lib/courses";
 import { regionMeta, seededUnit } from "./lib/regions";
 import { ensureAllSheets, ensureSheetsAround, providerForSlug } from "../src/lib/simulator/engine";
 import { dateAtMidnight } from "../src/lib/time";
-import { SEARCH_STATUS } from "../src/lib/constants";
+import { SEARCH_STATUS, TEE_STATUS, CONFIRM_STATUS } from "../src/lib/constants";
 
 const db = new PrismaClient();
 const DAYS_AHEAD = Number(process.env.SIM_DAYS_AHEAD) || 14;
@@ -127,6 +127,41 @@ async function main() {
         daysOfWeek: JSON.stringify([6, 0]),
       },
     });
+  }
+
+  // Confirm demo: one real booking the demo golfer holds, ~1.5 days out, so the
+  // next simulator tick sends a pre-round confirmation nudge for it. Idempotent —
+  // drops any prior demo booking first.
+  await db.teeTime.updateMany({
+    where: { bookedByUserId: demo.id },
+    data: {
+      bookedByUserId: null,
+      confirmStatus: null,
+      confirmToken: null,
+      confirmRequestedAt: null,
+      confirmRespondedAt: null,
+    },
+  });
+  if (wa) {
+    await ensureSheetsAround(db, wa, inDays(2), 1);
+    const slot = await db.teeTime.findFirst({
+      where: {
+        courseId: wa.id,
+        status: TEE_STATUS.BOOKED,
+        bookedByUserId: null,
+        teeAt: {
+          gte: new Date(Date.now() + 26 * 3_600_000),
+          lte: new Date(Date.now() + 46 * 3_600_000),
+        },
+      },
+      orderBy: { teeAt: "asc" },
+    });
+    if (slot) {
+      await db.teeTime.update({
+        where: { id: slot.id },
+        data: { bookedByUserId: demo.id, confirmStatus: CONFIRM_STATUS.PENDING },
+      });
+    }
   }
 
   const counts = {

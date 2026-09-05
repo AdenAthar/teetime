@@ -32,9 +32,10 @@ model User {
   notifyPrompts Boolean   @default(true)
   createdAt     DateTime  @default(now())
 
-  searches      Search[]
-  notifications Notification[]
-  sessions      Session[]
+  searches       Search[]
+  notifications  Notification[]
+  sessions       Session[]
+  bookedTeeTimes TeeTime[] // Confirm: tee times this golfer actually holds
 }
 
 model Course {
@@ -81,6 +82,8 @@ model Search {
 }
 
 /// status: OPEN | BOOKED
+/// confirmStatus (Confirm flow; null unless a real golfer is attached via
+/// bookedByUserId): PENDING | AWAITING_CONFIRMATION | CONFIRMED | CANCELED | MODIFY_REQUESTED
 model TeeTime {
   id         String   @id @default(cuid())
   courseId   String
@@ -91,21 +94,35 @@ model TeeTime {
   status     String   @default("BOOKED")
   updatedAt  DateTime @updatedAt
 
+  // Confirm: set only when a real golfer (not just simulated demand) holds this
+  // slot and needs a pre-round confirm/cancel/modify nudge. Everything below is
+  // null for the Waitlist-side synthetic tee-sheet noise.
+  bookedByUserId     String?
+  confirmStatus      String?
+  confirmToken       String?   @unique
+  confirmRequestedAt DateTime?
+  confirmRespondedAt DateTime?
+
   course        Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  bookedBy      User?          @relation(fields: [bookedByUserId], references: [id], onDelete: SetNull)
   notifications Notification[]
 
   @@unique([courseId, teeAt])
   @@index([courseId, teeAt])
   @@index([status])
+  @@index([confirmStatus])
 }
 
 /// channel: EMAIL | TEXT
+/// kind: MATCH (Waitlist — a search's watched slot opened) |
+///       CONFIRM_REQUEST (Confirm — pre-round nudge to an existing booking)
 model Notification {
   id        String    @id @default(cuid())
   userId    String
-  searchId  String
+  searchId  String? // null for CONFIRM_REQUEST — no Search is involved
   teeTimeId String
   channel   String
+  kind      String    @default("MATCH")
   subject   String
   body      String
   provider  String    @default("DEV") // DEV | RESEND | TWILIO
@@ -113,7 +130,7 @@ model Notification {
   readAt    DateTime?
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  search  Search  @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  search  Search? @relation(fields: [searchId], references: [id], onDelete: Cascade)
   teeTime TeeTime @relation(fields: [teeTimeId], references: [id], onDelete: Cascade)
 
   @@index([userId, sentAt])

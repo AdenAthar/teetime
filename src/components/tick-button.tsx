@@ -14,7 +14,8 @@ export function TickButton() {
       const res = await fetch("/api/tick", { method: "POST" });
       const j = await res.json();
       setLast(
-        `+${j.cancellations} cancellations · ${j.matches} matched · ${j.notifications} alerts sent`,
+        `+${j.cancellations} cancellations · ${j.confirmationsSent} confirm nudges · ` +
+          `${j.matches} matched · ${j.notifications} alerts sent`,
       );
       router.refresh();
     } finally {
