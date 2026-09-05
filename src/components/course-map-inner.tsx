@@ -154,6 +154,59 @@ function LocateControl() {
   );
 }
 
+/**
+ * "Cooperative gesture handling," same convention Google Maps embeds default
+ * to: scroll-to-zoom stays off until you click into the map, so a scroll
+ * gesture that merely passes over the map (page scroll) never gets trapped.
+ * Click it once and plain scroll zooms it; move the cursor off and it goes
+ * back to sleep. A brief hint explains it the first time you scroll over it
+ * before clicking.
+ */
+function ClickToActivateZoom() {
+  const map = useMap();
+  const [hint, setHint] = useState(false);
+
+  useEffect(() => {
+    map.scrollWheelZoom.disable();
+    const container = map.getContainer();
+    let hintTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function activate() {
+      map.scrollWheelZoom.enable();
+      setHint(false);
+    }
+    function deactivate() {
+      map.scrollWheelZoom.disable();
+    }
+    function onWheel() {
+      if (map.scrollWheelZoom.enabled()) return;
+      setHint(true);
+      if (hintTimer) clearTimeout(hintTimer);
+      hintTimer = setTimeout(() => setHint(false), 1400);
+    }
+
+    container.addEventListener("click", activate);
+    container.addEventListener("mouseleave", deactivate);
+    container.addEventListener("wheel", onWheel, { passive: true });
+    return () => {
+      container.removeEventListener("click", activate);
+      container.removeEventListener("mouseleave", deactivate);
+      container.removeEventListener("wheel", onWheel);
+      if (hintTimer) clearTimeout(hintTimer);
+      map.scrollWheelZoom.disable();
+    };
+  }, [map]);
+
+  if (!hint) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[900] grid place-items-center">
+      <span className="rounded-md bg-black/75 px-3 py-1.5 text-xs font-medium text-white shadow">
+        Click the map to enable scroll zoom
+      </span>
+    </div>
+  );
+}
+
 /** Ask for location once on first load; fall back to a US view. */
 function InitialLocate() {
   const map = useMap();
@@ -184,8 +237,7 @@ export default function CourseMapInner({
       center={[41, -96]}
       zoom={4}
       minZoom={3}
-      scrollWheelZoom
-      wheelPxPerZoomLevel={90}
+      scrollWheelZoom={false}
       preferCanvas
       zoomControl={false}
       className="h-full w-full"
@@ -196,6 +248,7 @@ export default function CourseMapInner({
         maxZoom={19}
       />
       <ZoomControl position="bottomright" />
+      <ClickToActivateZoom />
       <InitialLocate />
       <LocateControl />
       <FlyTo target={selected} />
