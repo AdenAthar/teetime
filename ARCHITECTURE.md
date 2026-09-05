@@ -89,6 +89,7 @@ Next.js 16 (App Router) — one deployable
 | 13 | **Brand** | mirror Noteefy's crimson / differentiate | **Kept the crimson palette + Material-blue account accents**; swapped the mark and name. The challenge is fidelity, so "same product, different name" is the target. New logo: a bell whose handle is a golf flagstick + pennant. |
 | 14 | **Auth-page background** | licensed course photo / generated | **CSS gradient + SVG hills.** Avoids shipping a copyrighted image; reads as a course at golden hour. |
 | 15 | **Header on scroll** | always-sticky / hide-on-scroll-down | **Hide-on-scroll-down, reveal-on-scroll-up** (`header-shell.client.tsx`, rAF-throttled, always shown above 80px). |
+| 16 | **Mouse-wheel over the map** | plain scroll zooms the map (matches Noteefy) / require ctrl+scroll (matches most map embeds) | **Plain scroll zooms** — Leaflet's `scrollWheelZoom`, matching Noteefy's real behavior. Tried a ctrl+scroll variant first (page never traps under the cursor) but that's not what Noteefy does, so reverted. Tradeoff: scrolling the page while the cursor happens to be over the map (which sits right under the header) zooms the map instead of scrolling — move the cursor off the map to keep scrolling, same as the real site. |
 
 ---
 

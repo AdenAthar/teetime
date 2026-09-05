@@ -154,68 +154,6 @@ function LocateControl() {
   );
 }
 
-/**
- * Plain scroll always scrolls the page — Leaflet's scrollWheelZoom stays off.
- * Ctrl/⌘+scroll zooms the map instead, same convention as Google Maps/Mapbox
- * embeds, and we preventDefault() on that combo so the browser's own
- * page/pinch-zoom doesn't fire while the cursor is over the map. A brief hint
- * appears if you scroll over the map without the modifier.
- */
-function CtrlScrollZoom() {
-  const map = useMap();
-  const [hint, setHint] = useState(false);
-
-  useEffect(() => {
-    const container = map.getContainer();
-    let hintTimer: ReturnType<typeof setTimeout> | null = null;
-    let zoomTimer: ReturnType<typeof setTimeout> | null = null;
-    let pending = 0;
-    let lastPoint: L.Point | null = null;
-
-    function flushZoom() {
-      if (pending !== 0 && lastPoint) {
-        map.setZoomAround(lastPoint, map.getZoom() + (pending > 0 ? 1 : -1), {
-          animate: true,
-        });
-      }
-      pending = 0;
-    }
-
-    function onWheel(e: WheelEvent) {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault(); // cancel the browser's native page/pinch zoom
-        pending += e.deltaY < 0 ? 1 : -1;
-        lastPoint = map.mouseEventToContainerPoint(e);
-        if (zoomTimer) clearTimeout(zoomTimer);
-        zoomTimer = setTimeout(flushZoom, 60);
-        setHint(false);
-      } else {
-        setHint(true);
-        if (hintTimer) clearTimeout(hintTimer);
-        hintTimer = setTimeout(() => setHint(false), 1400);
-      }
-      // anything without the modifier is left alone — it bubbles up and
-      // scrolls the page normally, exactly like scrolling over any other element.
-    }
-
-    container.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      container.removeEventListener("wheel", onWheel);
-      if (hintTimer) clearTimeout(hintTimer);
-      if (zoomTimer) clearTimeout(zoomTimer);
-    };
-  }, [map]);
-
-  if (!hint) return null;
-  return (
-    <div className="pointer-events-none absolute inset-0 z-[550] grid place-items-center">
-      <span className="rounded-md bg-black/75 px-3 py-1.5 text-xs font-medium text-white shadow">
-        Use ctrl + scroll to zoom the map
-      </span>
-    </div>
-  );
-}
-
 /** Ask for location once on first load; fall back to a US view. */
 function InitialLocate() {
   const map = useMap();
@@ -246,7 +184,8 @@ export default function CourseMapInner({
       center={[41, -96]}
       zoom={4}
       minZoom={3}
-      scrollWheelZoom={false}
+      scrollWheelZoom
+      wheelPxPerZoomLevel={90}
       preferCanvas
       zoomControl={false}
       className="h-full w-full"
@@ -257,7 +196,6 @@ export default function CourseMapInner({
         maxZoom={19}
       />
       <ZoomControl position="bottomright" />
-      <CtrlScrollZoom />
       <InitialLocate />
       <LocateControl />
       <FlyTo target={selected} />
