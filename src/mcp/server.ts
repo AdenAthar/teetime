@@ -13,7 +13,13 @@
  * for why. They wrap the same Prisma models the app uses; there is no separate
  * data path.
  */
-import "dotenv/config"; // so `npm run mcp` picks up .env like the other scripts
+// Load .env by absolute path (repo root), not from process.cwd() — an MCP client
+// may spawn this server with any working directory (Claude Desktop on Windows
+// spawns it in system32), and the app's other scripts rely on `.env` too.
+import { config as loadEnv } from "dotenv";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+loadEnv({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../../.env") });
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";

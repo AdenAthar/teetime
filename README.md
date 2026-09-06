@@ -99,18 +99,21 @@ quit** Claude Desktop (tray icon → Quit — closing the window isn't enough) a
   "mcpServers": {
     "teetime": {
       "command": "cmd",
-      "args": ["/c", "npm", "run", "mcp"],
-      "cwd": "C:\\absolute\\path\\to\\teetime"
+      "args": ["/c", "npm", "--prefix", "C:\\absolute\\path\\to\\teetime", "run", "mcp"]
     }
   }
 }
 ```
 
-On macOS/Linux use `"command": "npm", "args": ["run", "mcp"]` (the `cmd /c` wrapper
-is only needed because Claude Desktop on Windows can't spawn `npm`/`npx` directly).
+On macOS/Linux drop the `cmd /c` wrapper: `"command": "npm", "args": ["--prefix",
+"/absolute/path/to/teetime", "run", "mcp"]`.
 
-- `cwd` must be the repo root so `npm` finds the `mcp` script, `tsx` resolves the
-  `@/` path alias, and the server loads `.env`.
+- `--prefix` (not the config's `cwd` key) is what points `npm` at the repo. Claude
+  Desktop's Windows launcher spawns the server in `system32` and does not honour
+  `cwd`; `npm --prefix <dir> run <script>` `chdir`s into `<dir>` itself, so the
+  `mcp` script, the `@/` path alias, and `.env` all resolve.
+- The `cmd /c` wrapper is needed because Claude Desktop on Windows can't spawn
+  `npm`/`npx` directly (ENOENT).
 - To pass the database connection explicitly instead of relying on `.env`, add an
   `"env": { "DATABASE_URL": "postgresql://…", "DIRECT_URL": "postgresql://…" }` block.
 - It reads the same database the app does — point it at your Neon project (or a
