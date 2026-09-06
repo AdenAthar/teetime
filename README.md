@@ -82,30 +82,37 @@ Design notes are in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §8.
 
 ### Connect it to Claude Desktop
 
-Add this to Claude Desktop's MCP config — `%APPDATA%\Claude\claude_desktop_config.json`
-on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS
-— then fully restart Claude Desktop:
+Open Claude Desktop → **Settings → Developer** (or **Local MCP servers**) → **Edit
+Config**. That opens `claude_desktop_config.json`:
+
+| OS | Path |
+|---|---|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows (installer build) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Windows (Microsoft Store build) | `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\claude_desktop_config.json` |
+
+Add a `mcpServers` entry alongside whatever keys are already there, then **fully
+quit** Claude Desktop (tray icon → Quit — closing the window isn't enough) and reopen:
 
 ```json
 {
   "mcpServers": {
     "teetime": {
-      "command": "npx",
-      "args": ["tsx", "src/mcp/server.ts"],
-      "cwd": "C:\\absolute\\path\\to\\teetime",
-      "env": {
-        "DATABASE_URL": "postgresql://…",
-        "DIRECT_URL": "postgresql://…"
-      }
+      "command": "cmd",
+      "args": ["/c", "npm", "run", "mcp"],
+      "cwd": "C:\\absolute\\path\\to\\teetime"
     }
   }
 }
 ```
 
-- `cwd` must be the repo root so `tsx` finds `src/mcp/server.ts` and resolves the
-  `@/` path alias.
-- The `env` block is optional if `cwd` has a populated `.env` (the server loads it
-  via `dotenv`, like the other scripts).
+On macOS/Linux use `"command": "npm", "args": ["run", "mcp"]` (the `cmd /c` wrapper
+is only needed because Claude Desktop on Windows can't spawn `npm`/`npx` directly).
+
+- `cwd` must be the repo root so `npm` finds the `mcp` script, `tsx` resolves the
+  `@/` path alias, and the server loads `.env`.
+- To pass the database connection explicitly instead of relying on `.env`, add an
+  `"env": { "DATABASE_URL": "postgresql://…", "DIRECT_URL": "postgresql://…" }` block.
 - It reads the same database the app does — point it at your Neon project (or a
   local one) and it sees whatever courses / searches / tee sheets exist. Empty
   `check_availability` results are expected for courses nobody is watching (tee
