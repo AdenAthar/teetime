@@ -92,28 +92,37 @@ Config**. That opens `claude_desktop_config.json`:
 | Windows (Microsoft Store build) | `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\claude_desktop_config.json` |
 
 Add a `mcpServers` entry alongside whatever keys are already there, then **fully
-quit** Claude Desktop (tray icon → Quit — closing the window isn't enough) and reopen:
+quit** Claude Desktop (tray icon → Quit — closing the window isn't enough) and reopen.
+
+**Windows** — point it at the bundled launcher (`scripts/mcp.cmd`), which `cd`s to
+the repo itself before starting the server:
 
 ```json
 {
   "mcpServers": {
     "teetime": {
-      "command": "cmd",
-      "args": ["/c", "npm", "--prefix", "C:\\absolute\\path\\to\\teetime", "run", "mcp"]
+      "command": "C:\\absolute\\path\\to\\teetime\\scripts\\mcp.cmd"
     }
   }
 }
 ```
 
-On macOS/Linux drop the `cmd /c` wrapper: `"command": "npm", "args": ["--prefix",
-"/absolute/path/to/teetime", "run", "mcp"]`.
+**macOS / Linux** — `cwd` is honoured, so just:
 
-- `--prefix` (not the config's `cwd` key) is what points `npm` at the repo. Claude
-  Desktop's Windows launcher spawns the server in `system32` and does not honour
-  `cwd`; `npm --prefix <dir> run <script>` `chdir`s into `<dir>` itself, so the
-  `mcp` script, the `@/` path alias, and `.env` all resolve.
-- The `cmd /c` wrapper is needed because Claude Desktop on Windows can't spawn
-  `npm`/`npx` directly (ENOENT).
+```json
+{
+  "mcpServers": {
+    "teetime": { "command": "npm", "args": ["run", "mcp"], "cwd": "/absolute/path/to/teetime" }
+  }
+}
+```
+
+Why the Windows launcher: Claude Desktop's Windows build spawns MCP servers in
+`system32` and ignores the config's `cwd`, so a bare `npm run mcp` can't find
+`package.json` (and `tsx` can't resolve the `@/` alias). `scripts/mcp.cmd` uses
+`%~dp0` to locate the repo from its own path, so working directory doesn't matter.
+It needs only `node` on `PATH`.
+
 - To pass the database connection explicitly instead of relying on `.env`, add an
   `"env": { "DATABASE_URL": "postgresql://…", "DIRECT_URL": "postgresql://…" }` block.
 - It reads the same database the app does — point it at your Neon project (or a
