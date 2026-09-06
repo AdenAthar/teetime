@@ -67,6 +67,50 @@ go to the Dev Outbox / console. SMS is stubbed.
 ~15 min, cached) with `npm run geocode`, or `npm run geocode -- --offline` to place
 pins by state centroid only.
 
+## MCP server
+
+`npm run mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io)
+server (stdio) exposing three **read-only** tools against your `DATABASE_URL`:
+
+| Tool | Ask an assistant… |
+|---|---|
+| `search_courses` | *"search teetime for courses in Arizona"* |
+| `check_availability` | *"what's open at `<courseId>` on 2026-09-12?"* |
+| `get_search_status` | *"has search `<searchId>` matched anything?"* |
+
+Design notes are in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §8.
+
+### Connect it to Claude Desktop
+
+Add this to Claude Desktop's MCP config — `%APPDATA%\Claude\claude_desktop_config.json`
+on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS
+— then fully restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "teetime": {
+      "command": "npx",
+      "args": ["tsx", "src/mcp/server.ts"],
+      "cwd": "C:\\absolute\\path\\to\\teetime",
+      "env": {
+        "DATABASE_URL": "postgresql://…",
+        "DIRECT_URL": "postgresql://…"
+      }
+    }
+  }
+}
+```
+
+- `cwd` must be the repo root so `tsx` finds `src/mcp/server.ts` and resolves the
+  `@/` path alias.
+- The `env` block is optional if `cwd` has a populated `.env` (the server loads it
+  via `dotenv`, like the other scripts).
+- It reads the same database the app does — point it at your Neon project (or a
+  local one) and it sees whatever courses / searches / tee sheets exist. Empty
+  `check_availability` results are expected for courses nobody is watching (tee
+  sheets are generated lazily).
+
 ## Layout
 
 ```
@@ -81,6 +125,7 @@ src/
     notify/       channel fan-out (Resend | Dev) — Waitlist alerts + Confirm nudges
     confirm/      golfer confirm / cancel / modify actions
     searches/ account/   server actions
+  mcp/            server.ts — read-only MCP tools over stdio (npm run mcp)
   components/     site chrome, map, directory, dialogs, account screens
 scripts/          seed · geocode · tick-loop · shots (Playwright)
 data/             courses-raw.txt (source list) · geocache.json

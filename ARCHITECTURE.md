@@ -177,3 +177,49 @@ at it. SQLite instead: set `provider = "sqlite"` in `prisma/schema.prisma` and
 
 Visit `/api/dev/login` for the demo account; hit "Run simulator once" on `/dev/outbox`
 to watch an alert get generated, matched and "sent".
+
+---
+
+## 8. MCP server
+
+`src/mcp/server.ts` is a small [Model Context Protocol](https://modelcontextprotocol.io)
+server that exposes a few read-only slices of teetime as tools an MCP client
+(Claude Desktop, etc.) can call. It's a separate entrypoint — `npm run mcp` — not
+part of the Next.js app or the Vercel deployment. README → "MCP server" has the
+Claude Desktop config.
+
+**Why MCP.** The app already holds the data an assistant would want in order to
+reason about a golfer's situation — which courses exist, what's open, whether a
+search has fired. MCP is the standard way to hand that to an LLM client as
+callable tools with typed inputs, without inventing a bespoke API *and* a bespoke
+client for it. It fits cleanly here: the project is TypeScript, so the official
+`@modelcontextprotocol/sdk` drops in and reuses the project's zod for input
+schemas, and each tool is a thin wrapper over the same Prisma models the app
+uses (`@/lib/db`, `@/lib/constants`, `@/lib/time`) — no second data path.
+
+**Tools** (all read-only, zod-validated inputs):
+
+| Tool | Input | Returns |
+|---|---|---|
+| `search_courses` | `query` (name or region) | up to 25 matching `Course` rows incl. `id` |
+| `check_availability` | `courseId`, `date` (YYYY-MM-DD) | OPEN `TeeTime` slots for that course/day (UTC) |
+| `get_search_status` | `searchId` | the search's `ACTIVE\|PAUSED\|MATCHED\|EXPIRED` status + every alert sent for it |
+
+They chain: `search_courses` → `id` → `check_availability` / `get_search_status`.
+
+**Tradeoff — read-only for a first pass.** teetime also has obvious *write*
+actions worth exposing: create a search, stop notifications, cancel a booking via
+its confirm token. Those were left out on purpose. An MCP client may invoke tools
+autonomously, and every one of those writes has a real side effect — a new row
+someone then gets alerts for, a freed tee time the matcher immediately hands to
+other golfers. A read-only surface is still genuinely useful (an assistant can
+answer *"is anything open at Chambers Bay Saturday?"* or *"did my search ever
+match?"*) with no way to mutate state on the golfer's or the course's behalf.
+Adding the writes is a deliberate follow-up — ideally gated behind the client's
+own human-in-the-loop confirmation for each call.
+
+**Transport.** stdio only: the client spawns `npm run mcp` as a subprocess and
+talks over stdin/stdout. No port, no auth, no CORS, no session management — the
+cost is that it's local and single-client, which is fine for a demo. A hosted,
+multi-client, or remote server would need Streamable HTTP instead. (Because
+stdout carries the JSON-RPC frames, all logging in `server.ts` goes to stderr.)

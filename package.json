@@ -18,12 +18,14 @@
     "db:setup": "prisma db push && tsx scripts/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx scripts/seed.ts",
     "geocode": "tsx scripts/geocode.ts",
-    "tick": "tsx scripts/tick-loop.ts"
+    "tick": "tsx scripts/tick-loop.ts",
+    "mcp": "tsx src/mcp/server.ts"
   },
   "prisma": {
     "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@prisma/client": "^6.19.3",
     "date-fns": "^4.4.0",
     "jose": "^5.10.0",
