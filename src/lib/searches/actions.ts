@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { SEARCH_STATUS } from "@/lib/constants";
 import { dateAtMidnight } from "@/lib/time";
 import { ensureSheetsAround } from "@/lib/simulator/engine";
+import { parseSearchPrompt, type ParseResult } from "@/lib/ai/parse-search";
 
 type Result = { ok: boolean; error?: string; needsAuth?: boolean };
 
@@ -68,6 +69,19 @@ export async function createSearch(_prev: Result, form: FormData): Promise<Resul
 
   revalidatePath("/searches");
   return { ok: true };
+}
+
+/**
+ * Natural-language search parsing. Returns draft searches for the user to review
+ * and submit through `createSearch` — it never writes. Sign-in required so the
+ * LLM call sits behind auth.
+ */
+export async function parseSearchFromPrompt(
+  prompt: string,
+): Promise<ParseResult | { ok: false; error: string; needsAuth: true }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Log in to use natural-language search.", needsAuth: true };
+  return parseSearchPrompt(prompt);
 }
 
 async function ownSearch(id: string) {

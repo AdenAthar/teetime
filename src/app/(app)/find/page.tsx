@@ -1,7 +1,9 @@
 import { getCourses, groupByRegion } from "@/lib/courses";
 import { getUserId } from "@/lib/auth/session";
+import { AI_SEARCH_ENABLED } from "@/lib/ai/parse-search";
 import { CourseMap } from "@/components/course-map";
 import { CourseDirectory } from "@/components/course-directory";
+import { NlSearchBar } from "@/components/nl-search-bar";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,12 @@ export default async function FindPage() {
         Check the map below to find courses near you that are committed to making it easier for
         golfers to play more golf.
       </p>
+
+      {AI_SEARCH_ENABLED && (
+        <div className="mt-8">
+          <NlSearchBar signedIn={signedIn} />
+        </div>
+      )}
 
       <div className="relative isolate z-0 mt-8 overflow-hidden rounded-[14px] border border-border">
         <CourseMap pins={courses} signedIn={signedIn} />
