@@ -70,15 +70,25 @@ pins by state centroid only.
 ## MCP server
 
 `npm run mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io)
-server (stdio) exposing three **read-only** tools against your `DATABASE_URL`:
+server (stdio) that lets an MCP client (Claude Desktop, etc.) query teetime's
+live data directly — no browser, no scraping. It talks to the same Postgres the
+app does via the same Prisma models, so it always sees current state.
 
-| Tool | Ask an assistant… |
-|---|---|
-| `search_courses` | *"search teetime for courses in Arizona"* |
-| `check_availability` | *"what's open at `<courseId>` on 2026-09-12?"* |
-| `get_search_status` | *"has search `<searchId>` matched anything?"* |
+**What it can do** — three **read-only** tools:
 
-Design notes are in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §8.
+| Tool | Input | Returns |
+|---|---|---|
+| `search_courses` | a name or region fragment (`"Pebble"`, `"Arizona"`, `"Ontario"`) | up to 25 matching courses — id, name, region, country, booking provider + URL |
+| `check_availability` | a `courseId` + a date (`YYYY-MM-DD`) | every OPEN slot that day — tee time, players free, holes, price per player |
+| `get_search_status` | a `searchId` (from the app's My Searches page) | that search's status, watched course + time window, and every alert already sent |
+
+A typical chain: *"search teetime for courses in Arizona"* → *"what's open at
+`<that courseId>` on 2026-09-12?"* → *"has my search `<searchId>` matched
+anything yet?"*. The tools are read-only by design — booking and cancelling stay
+in the app, where a human is in the loop (see [`ARCHITECTURE.md`](./ARCHITECTURE.md) §8).
+
+Note: teetime only holds a tee sheet while a course is actively watched, so
+`check_availability` returns nothing for courses nobody has a search on.
 
 ### Connect it to Claude Desktop
 
