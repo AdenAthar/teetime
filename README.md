@@ -71,7 +71,7 @@ pins by state centroid only.
 
 Set `ANTHROPIC_API_KEY` in `.env` to show a floating popup in the bottom-right
 corner: type *"9 holes in Arizona this week, afternoons"* or *"Saturday morning
-tee time for 4 at Bethpage Black"* and it proposes draft searches you review and
+tee time for 4 at Bandon Dunes"* and it proposes draft searches you review and
 submit through the normal form. The model only *extracts* fields (course/area,
 dates, time window, party size) — it never writes; course resolution and search
 creation stay in the app's own code, and the parser is rate-limited per user/IP.
@@ -88,7 +88,7 @@ app does via the same Prisma models, so it always sees current state.
 
 | Tool | Input | Returns |
 |---|---|---|
-| `search_courses` | a name or region fragment (`"Pebble"`, `"Arizona"`, `"Ontario"`) | up to 25 matching courses — id, name, region, country, booking provider + URL |
+| `search_courses` | a name or region fragment (`"Bandon"`, `"Arizona"`, `"Ontario"`) | up to 25 matching courses — id, name, region, country, booking provider + URL |
 | `check_availability` | a `courseId` + a date (`YYYY-MM-DD`) | every OPEN slot that day — tee time, players free, holes, price per player |
 | `get_search_status` | a `searchId` (from the app's My Searches page) | that search's status, watched course + time window, and every alert already sent |
 

@@ -56,7 +56,7 @@ server.registerTool(
         .string()
         .min(1)
         .describe(
-          "Part of a course name or a region name, e.g. \"Pebble\", \"Bethpage\", \"Arizona\", \"Ontario\"",
+          "Part of a course name or a region name, e.g. \"Bandon\", \"Chambers\", \"Arizona\", \"Ontario\"",
         ),
     },
   },

@@ -55,7 +55,7 @@ const TOOL: Anthropic.Tool = {
       courseQuery: {
         type: "string",
         description:
-          "Course name or US state / Canadian province the golfer named (e.g. \"Pebble Beach\", \"Arizona\"). Empty string if neither was mentioned.",
+          "Course name or US state / Canadian province the golfer named (e.g. \"Bandon Dunes\", \"Arizona\"). Empty string if neither was mentioned.",
       },
       dateStart: { type: "string", description: "First day to watch, YYYY-MM-DD." },
       dateEnd: {
@@ -133,7 +133,7 @@ export async function parseSearchPrompt(prompt: string): Promise<ParseResult> {
   if (!x.courseQuery.trim()) {
     return {
       ok: false,
-      error: "Which course or area? Mention a course name or a state, e.g. \"Torrey Pines\" or \"Arizona\".",
+      error: "Which course or area? Mention a course name or a state, e.g. \"Chambers Bay\" or \"Arizona\".",
     };
   }
 

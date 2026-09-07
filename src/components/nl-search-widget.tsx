@@ -7,9 +7,9 @@ import { minutesToLabel } from "@/lib/time";
 import type { SearchDraft } from "@/lib/ai/parse-search";
 
 const EXAMPLES = [
-  "Saturday morning tee time for 4 at Bethpage Black",
+  "Saturday morning tee time for 4 at Bandon Dunes",
   "9 holes in Arizona this week, afternoons",
-  "twilight round for 2 at Torrey Pines next weekend",
+  "twilight round for 2 near Chambers Bay next weekend",
 ];
 
 function timeOptions() {
@@ -121,7 +121,7 @@ function NlSearchPanel({ signedIn }: { signedIn: boolean }) {
         <input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="e.g. Saturday morning tee time for 4 at Bethpage Black"
+          placeholder="e.g. Saturday morning tee time for 4 at Bandon Dunes"
           className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-crimson"
           maxLength={300}
           autoFocus
