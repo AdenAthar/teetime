@@ -10,7 +10,9 @@ releases the slot, which the retained **Waitlist** flow (golfer *searches* — c
 + date + window + party size) then refills. Notifications land in the Dev Outbox by
 default, real email if configured.
 
-See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design and the tradeoffs.
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design and the tradeoffs, or
+[`BRIEFING.md`](./BRIEFING.md) for the full deep-dive (data model, simulator
+internals, state machines, diagrams, anticipated review questions).
 
 ## Stack
 
