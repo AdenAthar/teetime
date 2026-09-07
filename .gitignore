@@ -54,3 +54,6 @@ prisma/*.db-journal
 scratchpad-*
 /scratchpad-shots
 
+# local-only project briefing (kept out of the repo)
+BRIEFING.md
+
