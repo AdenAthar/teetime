@@ -5,7 +5,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { db } from "@/lib/db";
 
 const COOKIE = "tt_session";
-const MAX_AGE = 60 * 15; // 15 min
+const MAX_AGE = 60 * 30; // 30 min
 
 function secret() {
   return new TextEncoder().encode(
