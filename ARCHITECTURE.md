@@ -107,7 +107,7 @@ Next.js 16 (App Router) — one deployable
 | 15 | **Header on scroll** | always-sticky / hide-on-scroll-down | **Hide-on-scroll-down, reveal-on-scroll-up** (`header-shell.client.tsx`, rAF-throttled, always shown above 80px). |
 | 16 | **Mouse-wheel over the map** | always-on scroll-zoom / ctrl+scroll gate / click-to-activate | **Click-to-activate ("cooperative gesture handling")** — the same convention Google Maps embeds default to (that "©2026 Google" attribution on Noteefy's map is the tell). Scroll-zoom stays off until you click into the map; a plain scroll before that just scrolls the page (never trapped, header hide-on-scroll unaffected); moving the cursor off the map re-disarms it. Tried always-on plain scroll first — it reproduces Noteefy's *end state* but traps any scroll gesture that starts over the map, which sits right under the header, so it kept reading as "scrolling is broken." Also tried ctrl+scroll, which solves the trap but isn't what Noteefy's real embed requires. |
 | 17 | **Primary mechanic: Confirm vs Waitlist** | model the golfer-initiated always-on search (Waitlist) / model pre-round confirmation + automatic recapture (Confirm) | **Confirm, with Waitlist retained as the refill mechanic.** The first build was pure Waitlist — a golfer sets a search and waits for a slot to open. But researching the real product line, the mechanics I'd actually built (a course-side tee sheet, cancellations freeing slots, notifications firing on the *transition*) map to **Confirm**: the course proactively nudges each booked golfer 24–48 h out; a cancel or a non-response releases the slot; only *then* does search-matching fill it. Confirm is course-initiated and booking-attached (`TeeTime.bookedByUserId` + `confirmStatus`); Waitlist is golfer-initiated and search-attached (`Search`). Modelled Confirm as the primary flow and kept Waitlist because (a) it's a real second product and (b) it's literally what recaptures the freed slot. Modelling booking-ownership as fields on `TeeTime` rather than a separate `Booking` table was deliberate — smaller, reviewable diff, and a slot only ever has one holder. |
-| 18 | **Natural-language search** | LLM parses *and* creates the search (an agent) / LLM only parses, human submits | **Parse only.** The `/find` box (§9) sends the prompt to Claude with one forced tool call that returns structured fields — course text, date range, time window, party size — and nothing else. The server resolves the course against Postgres itself and expands the date range with the app's own UTC helpers; the golfer reviews pre-filled draft cards and submits each through the unchanged `createSearch`. The model never sees a course id, never writes, and a bad/absent key just hides the box. This keeps the LLM on the one job it's good at (fuzzy intent → structure) and off the jobs the app already does deterministically. |
+| 18 | **Natural-language search** | LLM parses *and* creates the search (an agent) / LLM only parses, human submits | **Parse only.** The bottom-right popup (§9) sends the prompt to Claude with one forced tool call that returns structured fields — course text, date range, time window, party size — and nothing else. The server resolves the course against Postgres itself and expands the date range with the app's own UTC helpers; the golfer reviews pre-filled draft cards and submits each through the unchanged `createSearch`. The model never sees a course id, never writes, and a bad/absent key just hides the box. This keeps the LLM on the one job it's good at (fuzzy intent → structure) and off the jobs the app already does deterministically. |
 
 ---
 
@@ -229,11 +229,19 @@ stdout carries the JSON-RPC frames, all logging in `server.ts` goes to stderr.)
 
 ## 9. Natural-language search (optional)
 
-`/find` shows a text box — *"9 holes in Arizona this week, afternoons"* — when
-`ANTHROPIC_API_KEY` is set (`AI_SEARCH_ENABLED`). Unset, it's not rendered and
-nothing else about the app changes.
+A floating popup in the bottom-right corner — *"9 holes in Arizona this week,
+afternoons"* — shown site-wide (rendered from the `(app)` layout) when
+`ANTHROPIC_API_KEY` is set (`AI_SEARCH_ENABLED`). Unset, neither the button nor
+the panel is rendered and nothing else about the app changes.
 
-**Flow.** `NlSearchBar` (client) → `parseSearchFromPrompt` server action (sign-in
+**UI.** `NlSearchWidget` (client) is a fixed launcher button + a collapsible
+panel (`z-[1300]` — above the header, below the create-search modal). The panel
+body (`NlSearchPanel`) holds the prompt box, example chips, and the draft cards.
+It deliberately doesn't reuse the `CreateSearchDialog` portal/modal — each draft
+is its own inline `<form action={createSearch}>`, so the widget stays a
+self-contained overlay with no stacking-context entanglement with the map.
+
+**Flow.** `NlSearchWidget` → `parseSearchFromPrompt` server action (sign-in
 required, plus a sliding-window rate limit — 12/user/h, 24/IP/h, `AiRequestLog`
 table via raw SQL so it works without a client regen and on serverless where
 memory isn't shared — so a public deploy can't be looped into a large Anthropic
@@ -248,7 +256,7 @@ bill) → `parseSearchPrompt` in `src/lib/ai/parse-search.ts`:
    an id), clamps and expands the date range with `draft-math.ts` (pure, UTC,
    unit-checkable — this app has been bitten by local-vs-UTC date drift before),
    and fans out to at most `MAX_DRAFTS` course×day drafts.
-3. `NlSearchBar` renders each draft as a pre-filled card built from the *same*
+3. `NlSearchPanel` renders each draft as a pre-filled card built from the *same*
    fields the manual dialog uses; submitting posts to the unchanged `createSearch`.
 
 **Why this split.** The model does the one thing it's better at than a parser —

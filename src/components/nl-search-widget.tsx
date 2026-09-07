@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useActionState } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { createSearch, parseSearchFromPrompt } from "@/lib/searches/actions";
 import { minutesToLabel } from "@/lib/time";
@@ -19,7 +18,74 @@ function timeOptions() {
   return out;
 }
 
-export function NlSearchBar({ signedIn }: { signedIn: boolean }) {
+/**
+ * Floating bottom-right popup for natural-language tee-time search. Rendered
+ * site-wide from the (app) layout when ANTHROPIC_API_KEY is set. The panel body
+ * is <NlSearchPanel>; it never opens the create-search modal — each draft is its
+ * own inline <form action={createSearch}>.
+ */
+export function NlSearchWidget({ signedIn }: { signedIn: boolean }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  return (
+    <>
+      {open && (
+        <div className="tt-fade-in fixed bottom-20 right-4 z-[1300] flex max-h-[70vh] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl sm:bottom-24">
+          <div className="flex items-center justify-between bg-crimson px-4 py-3 text-white">
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                Beta
+              </span>
+              <h2 className="text-sm font-semibold">Find a tee time</h2>
+            </div>
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Close tee-time finder"
+              className="text-white/90 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="overflow-y-auto p-4">
+            <NlSearchPanel signedIn={signedIn} />
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label={open ? "Close tee-time finder" : "Open tee-time finder"}
+        aria-expanded={open}
+        className="fixed bottom-4 right-4 z-[1300] flex h-14 w-14 items-center justify-center rounded-full bg-crimson text-white shadow-lg transition hover:bg-crimson-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-crimson focus-visible:ring-offset-2"
+      >
+        {open ? (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 4V6z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <path d="M8 9h8M8 12h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        )}
+      </button>
+    </>
+  );
+}
+
+function NlSearchPanel({ signedIn }: { signedIn: boolean }) {
   const [prompt, setPrompt] = useState("");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -44,16 +110,9 @@ export function NlSearchBar({ signedIn }: { signedIn: boolean }) {
   }
 
   return (
-    <div className="rounded-[14px] border border-border bg-surface p-4 sm:p-5">
-      <div className="flex items-center gap-2">
-        <span className="rounded-full bg-crimson-tint px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-crimson-dark">
-          Beta
-        </span>
-        <h2 className="text-sm font-semibold text-foreground">Describe your ideal tee time</h2>
-      </div>
-
+    <div className="space-y-3">
       <form
-        className="mt-3 flex flex-col gap-2 sm:flex-row"
+        className="space-y-2"
         onSubmit={(e) => {
           e.preventDefault();
           run(prompt);
@@ -65,17 +124,18 @@ export function NlSearchBar({ signedIn }: { signedIn: boolean }) {
           placeholder="e.g. Saturday morning tee time for 4 at Bethpage Black"
           className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-crimson"
           maxLength={300}
+          autoFocus
         />
         <button
           disabled={pending || !prompt.trim()}
-          className="shrink-0 rounded-full bg-crimson px-5 py-2 text-sm font-semibold text-white hover:bg-crimson-dark disabled:opacity-60"
+          className="w-full rounded-full bg-crimson py-2 text-sm font-semibold text-white hover:bg-crimson-dark disabled:opacity-60"
         >
           {pending ? "Reading…" : "Find tee times"}
         </button>
       </form>
 
       {!result && !error && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {EXAMPLES.map((ex) => (
             <button
               key={ex}
@@ -93,7 +153,7 @@ export function NlSearchBar({ signedIn }: { signedIn: boolean }) {
       )}
 
       {error && (
-        <p className="mt-3 text-sm text-crimson">
+        <p className="text-sm text-crimson">
           {error}{" "}
           {needsAuth && (
             <Link href="/login" className="font-medium underline">
@@ -104,7 +164,7 @@ export function NlSearchBar({ signedIn }: { signedIn: boolean }) {
       )}
 
       {result && (
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3">
           <p className="text-sm text-muted">
             {result.note}{" "}
             <button
@@ -136,7 +196,7 @@ function DraftCard({ draft, signedIn }: { draft: SearchDraft; signedIn: boolean 
 
   if (state.ok) {
     return (
-      <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm">
+      <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2.5 text-sm">
         <span className="font-medium text-green-800">✓ Watching {draft.courseName}</span>{" "}
         <Link href="/searches" className="text-green-800 underline">
           My Searches
@@ -146,15 +206,15 @@ function DraftCard({ draft, signedIn }: { draft: SearchDraft; signedIn: boolean 
   }
 
   return (
-    <form action={action} className="rounded-lg border border-border p-4">
+    <form action={action} className="rounded-lg border border-border p-3">
       <input type="hidden" name="courseId" value={draft.courseId} />
-      <div className="mb-3">
+      <div className="mb-2">
         <p className="text-sm font-semibold text-foreground">{draft.courseName}</p>
         <p className="text-xs text-muted">{draft.region}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-        <label className="block">
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <label className="col-span-2 block">
           <span className="mb-1 block text-xs font-medium text-muted">Date</span>
           <input
             type="date"
@@ -200,7 +260,7 @@ function DraftCard({ draft, signedIn }: { draft: SearchDraft; signedIn: boolean 
       </div>
 
       {!signedIn && (
-        <p className="mt-3 rounded-md bg-crimson-tint px-3 py-2 text-xs text-crimson-dark">
+        <p className="mt-2 rounded-md bg-crimson-tint px-3 py-2 text-xs text-crimson-dark">
           You&apos;ll be asked to log in to save this search.
         </p>
       )}
@@ -213,7 +273,7 @@ function DraftCard({ draft, signedIn }: { draft: SearchDraft; signedIn: boolean 
 
       <button
         disabled={pending}
-        className="mt-3 rounded-full bg-crimson px-4 py-2 text-sm font-semibold text-white hover:bg-crimson-dark disabled:opacity-60"
+        className="mt-2 w-full rounded-full bg-crimson py-2 text-sm font-semibold text-white hover:bg-crimson-dark disabled:opacity-60"
       >
         {pending ? "Creating…" : "Create this search"}
       </button>
