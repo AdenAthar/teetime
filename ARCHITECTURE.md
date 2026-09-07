@@ -47,12 +47,20 @@ proprietary and unreplicable. So the central move is a **fake tee-sheet provider
   2. **Confirm — auto-release:** an `AWAITING_CONFIRMATION` booking still
      unanswered within 3 h of tee-off is released (`status: OPEN`), same as an
      explicit cancel, then handed to the matcher.
-  3. **Waitlist churn:** flips booked↔open slots to model ambient bookings and
+  3. **Search housekeeping:** expire searches whose window has fully passed;
+     re-arm a `MATCHED` search (future date) back to `ACTIVE` after a 45 s
+     cooldown so it can match again on a *new* slot — the demo keeps producing
+     alerts instead of going quiet after the first hit.
+  4. **Waitlist churn:** flips booked↔open slots to model ambient bookings and
      cancellations, plus a biased "targeted cancellation" inside a random active
-     search's window so demos produce hits.
+     search's window so demos produce hits. Rebookings are **capped so a watched
+     sheet never drops below `SIM_OPEN_FLOOR_FRACTION` (18%) open** — otherwise
+     rebookings (5/tick) > cancellations (4/tick) drains every sheet to zero over
+     a long-running session.
 - Everything downstream is **real code**: `runMatcher` queries active searches
   against each newly-opened slot (whether Confirm or Waitlist freed it); the
-  notifier fans the hit out; the search moves to `MATCHED`; the alert is recorded.
+  notifier fans the hit out; the search moves to `MATCHED`; the alert is recorded
+  (never the same `(search, slot)` pair twice within an hour).
 - The golfer's confirm / cancel / modify link (`/confirm/[token]`, token-gated,
   no login) drives the same `runMatcher` path on cancel/modify.
 

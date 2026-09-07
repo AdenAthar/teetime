@@ -7,6 +7,9 @@ import {
   CONFIRM_ASK_MIN_HOURS,
   CONFIRM_ASK_MAX_HOURS,
   CONFIRM_AUTO_RELEASE_WITHIN_HOURS,
+  SIM_OPEN_FLOOR_FRACTION,
+  SEARCH_REARM_COOLDOWN_MS,
+  NOTIFICATION_DEDUPE_MS,
 } from "@/lib/constants";
 import {
   DAY_START_MIN,
@@ -135,13 +138,16 @@ type TickResult = {
   matches: number;
   notifications: number;
   confirmationsSent: number;
+  rearmed: number;
 };
 
 /**
  * One simulator crank:
+ *  - expire dead searches; re-arm recently-matched ones so alerts keep coming
  *  - flip some BOOKED future slots -> OPEN (cancellations), then run the matcher
- *  - flip some OPEN future slots -> BOOKED (someone else grabbed it)
- *  - expire past searches
+ *  - flip some OPEN future slots -> BOOKED (someone else grabbed it), but never
+ *    below SIM_OPEN_FLOOR_FRACTION of the sheet — so availability churns around
+ *    an equilibrium instead of draining to zero
  */
 export async function tick(
   db: PrismaClient,
@@ -155,6 +161,7 @@ export async function tick(
     matches: 0,
     notifications: 0,
     confirmationsSent: 0,
+    rearmed: 0,
   };
 
   // --- Confirm: pre-round nudges + auto-release of unanswered bookings ---
@@ -165,6 +172,36 @@ export async function tick(
   res.cancellations += released.released;
   res.matches += released.matches;
   res.notifications += released.notifications;
+
+  // --- search housekeeping: expire the dead, re-arm the recently matched ---
+  const todayStart = dateAtMidnight(now);
+  const nowMin = minutesFromMidnight(now);
+  // Dead = the watched day is past, or it's today and the window has ended.
+  await db.search.updateMany({
+    where: {
+      status: { in: [SEARCH_STATUS.ACTIVE, SEARCH_STATUS.MATCHED] },
+      OR: [
+        { date: { lt: todayStart } },
+        { date: { gte: todayStart, lt: new Date(todayStart.getTime() + 86_400_000) }, endMin: { lte: nowMin } },
+      ],
+    },
+    data: { status: SEARCH_STATUS.EXPIRED },
+  });
+  // A MATCHED search whose day is still ahead goes back to ACTIVE after a short
+  // cooldown, so it can match again on a *new* slot (per-slot dedup in
+  // runMatcher prevents re-alerting the same one).
+  const rearm = await db.search.updateMany({
+    where: {
+      status: SEARCH_STATUS.MATCHED,
+      date: { gte: todayStart },
+      OR: [
+        { lastCheckedAt: null },
+        { lastCheckedAt: { lt: new Date(now.getTime() - SEARCH_REARM_COOLDOWN_MS) } },
+      ],
+    },
+    data: { status: SEARCH_STATUS.ACTIVE },
+  });
+  res.rearmed += rearm.count;
 
   // --- cancellations ---
   const booked = await db.teeTime.findMany({
@@ -199,10 +236,20 @@ export async function tick(
     const dayStart = dateAtMidnight(search.date);
     const windowStart = new Date(dayStart.getTime() + search.startMin * 60_000);
     const windowEnd = new Date(dayStart.getTime() + search.endMin * 60_000);
+    // Skip slots this search was recently alerted about — otherwise the matcher's
+    // per-slot dedup would make the opened slot produce no new alert.
+    const seen = await db.notification.findMany({
+      where: {
+        searchId: search.id,
+        sentAt: { gt: new Date(now.getTime() - NOTIFICATION_DEDUPE_MS) },
+      },
+      select: { teeTimeId: true },
+    });
     const slot = await db.teeTime.findFirst({
       where: {
         courseId: search.courseId,
         status: TEE_STATUS.BOOKED,
+        id: { notIn: seen.map((n) => n.teeTimeId) },
         teeAt: {
           gte: new Date(Math.max(windowStart.getTime(), now.getTime() + 3_600_000)),
           lte: windowEnd,
@@ -223,22 +270,25 @@ export async function tick(
   }
 
   // --- rebookings (slots quietly filling back up) ---
+  // Capped so we never push a watched sheet below the open-slot floor — without
+  // this, rebookings (5) > cancellations (4) drains every sheet to zero over a
+  // long-running dev session.
+  const futureSlot = { teeAt: { gt: new Date(now.getTime() + 3_600_000), lt: horizon } };
+  const [openNow, totalFuture] = await Promise.all([
+    db.teeTime.count({ where: { status: TEE_STATUS.OPEN, ...futureSlot } }),
+    db.teeTime.count({ where: futureSlot }),
+  ]);
+  const rebookBudget = Math.max(0, openNow - Math.ceil(totalFuture * SIM_OPEN_FLOOR_FRACTION));
   const open = await db.teeTime.findMany({
-    where: { status: TEE_STATUS.OPEN, teeAt: { gt: new Date(now.getTime() + 3_600_000), lt: horizon } },
+    where: { status: TEE_STATUS.OPEN, ...futureSlot },
     take: 400,
     select: { id: true },
   });
-  const toRebook = pickRandom(open, cfg.rebookings);
+  const toRebook = pickRandom(open, Math.min(cfg.rebookings, rebookBudget));
   for (const t of toRebook) {
     await db.teeTime.update({ where: { id: t.id }, data: { status: TEE_STATUS.BOOKED } });
     res.rebookings++;
   }
-
-  // --- expire stale searches ---
-  await db.search.updateMany({
-    where: { status: SEARCH_STATUS.ACTIVE, date: { lt: dateAtMidnight(now) } },
-    data: { status: SEARCH_STATUS.EXPIRED },
-  });
 
   return res;
 }
@@ -268,7 +318,11 @@ export async function runMatcher(
   for (const search of searches) {
     if (!sameUtcDay(search.date, teeTime.teeAt)) continue;
     const already = await db.notification.findFirst({
-      where: { searchId: search.id, teeTimeId: teeTime.id },
+      where: {
+        searchId: search.id,
+        teeTimeId: teeTime.id,
+        sentAt: { gt: new Date(Date.now() - NOTIFICATION_DEDUPE_MS) },
+      },
       select: { id: true },
     });
     if (already) continue;

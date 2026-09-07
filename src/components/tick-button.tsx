@@ -15,7 +15,7 @@ export function TickButton() {
       const j = await res.json();
       setLast(
         `+${j.cancellations} cancellations · ${j.confirmationsSent} confirm nudges · ` +
-          `${j.matches} matched · ${j.notifications} alerts sent`,
+          `${j.rearmed} searches re-armed · ${j.matches} matched · ${j.notifications} alerts sent`,
       );
       router.refresh();
     } finally {

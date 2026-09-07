@@ -34,6 +34,19 @@ export const CONFIRM_ASK_MIN_HOURS = 24;
 export const CONFIRM_ASK_MAX_HOURS = 48;
 export const CONFIRM_AUTO_RELEASE_WITHIN_HOURS = 3;
 
+// Simulator tuning:
+//  - keep at least this fraction of each watched sheet OPEN, so repeated ticks
+//    churn availability around an equilibrium instead of draining it to zero.
+//  - re-arm a MATCHED search back to ACTIVE this long after its last match, so
+//    the demo keeps producing alerts as *new* slots open (per-slot dedup still
+//    stops it re-alerting the same slot).
+export const SIM_OPEN_FLOOR_FRACTION = 0.18;
+export const SEARCH_REARM_COOLDOWN_MS = 45_000;
+// Don't re-alert the same (search, slot) pair within this window. Outside it, a
+// still-open slot is fair game again — useful signal, and it keeps a long-lived
+// demo deploy from going permanently quiet.
+export const NOTIFICATION_DEDUPE_MS = 60 * 60 * 1000;
+
 export const BOOKING_PROVIDERS = [
   "GolfNow",
   "foreUp",
