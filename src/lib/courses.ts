@@ -48,3 +48,33 @@ export function groupByRegion(courses: CoursePin[]): RegionGroup[] {
 export async function getCourseBySlug(slug: string) {
   return db.course.findUnique({ where: { slug } });
 }
+
+/**
+ * Fuzzy course lookup by name or region — shared by the natural-language search
+ * parser (and mirrors what the MCP `search_courses` tool does).
+ */
+export async function findCourses(query: string, limit = 5): Promise<CoursePin[]> {
+  const q = query.trim();
+  if (!q) return [];
+  return db.course.findMany({
+    where: {
+      OR: [
+        { name: { contains: q, mode: "insensitive" } },
+        { region: { contains: q, mode: "insensitive" } },
+      ],
+    },
+    orderBy: [{ region: "asc" }, { name: "asc" }],
+    take: limit,
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      region: true,
+      country: true,
+      lat: true,
+      lng: true,
+      bookingUrl: true,
+      provider: true,
+    },
+  });
+}
