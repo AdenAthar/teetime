@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -8,6 +9,7 @@ import { SEARCH_STATUS } from "@/lib/constants";
 import { dateAtMidnight } from "@/lib/time";
 import { ensureSheetsAround } from "@/lib/simulator/engine";
 import { parseSearchPrompt, type ParseResult } from "@/lib/ai/parse-search";
+import { checkAiRateLimit, recordAiRequest } from "@/lib/ai/rate-limit";
 
 type Result = { ok: boolean; error?: string; needsAuth?: boolean };
 
@@ -74,13 +76,27 @@ export async function createSearch(_prev: Result, form: FormData): Promise<Resul
 /**
  * Natural-language search parsing. Returns draft searches for the user to review
  * and submit through `createSearch` — it never writes. Sign-in required so the
- * LLM call sits behind auth.
+ * LLM call sits behind auth, and rate-limited per user + IP so a public deploy
+ * can't be looped into a large Anthropic bill.
  */
 export async function parseSearchFromPrompt(
   prompt: string,
-): Promise<ParseResult | { ok: false; error: string; needsAuth: true }> {
+): Promise<ParseResult | { ok: false; error: string; needsAuth?: true }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "Log in to use natural-language search.", needsAuth: true };
+
+  const fwd = (await headers()).get("x-forwarded-for") ?? "";
+  const ip = fwd.split(",")[0]!.trim() || null;
+
+  const verdict = await checkAiRateLimit(user.id, ip);
+  if (!verdict.ok) {
+    return {
+      ok: false,
+      error: "You've hit the hourly limit for natural-language search — use the form below, or try again later.",
+    };
+  }
+  await recordAiRequest(user.id, ip);
+
   return parseSearchPrompt(prompt);
 }
 

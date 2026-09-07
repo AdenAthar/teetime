@@ -234,8 +234,10 @@ stdout carries the JSON-RPC frames, all logging in `server.ts` goes to stderr.)
 nothing else about the app changes.
 
 **Flow.** `NlSearchBar` (client) → `parseSearchFromPrompt` server action (sign-in
-required, so the LLM call sits behind auth) → `parseSearchPrompt` in
-`src/lib/ai/parse-search.ts`:
+required, plus a sliding-window rate limit — 12/user/h, 24/IP/h, `AiRequestLog`
+table via raw SQL so it works without a client regen and on serverless where
+memory isn't shared — so a public deploy can't be looped into a large Anthropic
+bill) → `parseSearchPrompt` in `src/lib/ai/parse-search.ts`:
 
 1. One `messages.create` call to `claude-haiku-4-5`, `tool_choice` forced to a
    single `propose_search` tool. The model returns only: `courseQuery` (free

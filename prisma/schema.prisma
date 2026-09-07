@@ -159,3 +159,12 @@ model Session {
 
   @@index([userId])
 }
+
+/** One row per accepted natural-language search parse — sliding-window rate limit. */
+model AiRequestLog {
+  id        String   @id @default(cuid())
+  key       String // "user:<id>" or "ip:<addr>"
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}
