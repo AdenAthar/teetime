@@ -70,8 +70,8 @@ pins by state centroid only.
 ### Optional: natural-language search
 
 Set `ANTHROPIC_API_KEY` in `.env` to show a text box on `/find`: type *"9 holes in
-Arizona this week, afternoons"* or *"Saturday morning foursome at Bethpage Black"*
-and it proposes draft searches you review and submit through the normal form. The
+Arizona this week, afternoons"* or *"Saturday morning tee time for 4 at Bethpage
+Black"* and it proposes draft searches you review and submit through the normal form. The
 model only *extracts* fields (course/area, dates, time window, party size) — it
 never writes; course resolution and search creation stay in the app's own code.
 Unset, the box is hidden and nothing else changes. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §9.
