@@ -2,6 +2,7 @@ export const SEARCH_STATUS = {
   ACTIVE: "ACTIVE",
   PAUSED: "PAUSED",
   MATCHED: "MATCHED",
+  BOOKED: "BOOKED", // golfer booked the matched slot — search is done, booking is now theirs
   EXPIRED: "EXPIRED",
 } as const;
 export type SearchStatus = (typeof SEARCH_STATUS)[keyof typeof SEARCH_STATUS];
@@ -29,8 +30,10 @@ export const NOTIFICATION_KIND = {
 } as const;
 export type NotificationKind = (typeof NOTIFICATION_KIND)[keyof typeof NOTIFICATION_KIND];
 
-// Confirm timing: ask 24-48h out, auto-release if still unanswered inside 3h of tee time.
-export const CONFIRM_ASK_MIN_HOURS = 24;
+// Confirm timing: ask any time from 48h out down to 3h before tee-off, auto-release
+// if still unanswered inside 3h. (The floor is low so a slot booked at short notice
+// from a Waitlist match still gets its one confirmation nudge.)
+export const CONFIRM_ASK_MIN_HOURS = 3;
 export const CONFIRM_ASK_MAX_HOURS = 48;
 export const CONFIRM_AUTO_RELEASE_WITHIN_HOURS = 3;
 

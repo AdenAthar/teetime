@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { clsx } from "@/lib/clsx";
 import { InfoIcon } from "./icons";
 import { minutesToLabel, formatDollars } from "@/lib/time";
-import { pauseSearch, deleteSearch, reactivateSearch } from "@/lib/searches/actions";
+import {
+  pauseSearch,
+  deleteSearch,
+  reactivateSearch,
+  bookMatchedSlot,
+} from "@/lib/searches/actions";
 import { SimulatorHeartbeat } from "./simulator-heartbeat";
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -28,6 +33,7 @@ type SearchVM = {
     teeAt: string;
     priceCents: number;
   }[];
+  booking: { teeAt: string; priceCents: number; confirmStatus: string | null } | null;
 };
 
 export function SearchesView({ searches }: { searches: SearchVM[] }) {
@@ -93,6 +99,7 @@ export function SearchesView({ searches }: { searches: SearchVM[] }) {
 
 function SearchCard({ s }: { s: SearchVM }) {
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const date = new Date(s.date).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -126,6 +133,7 @@ function SearchCard({ s }: { s: SearchVM }) {
               s.status === "ACTIVE" && "bg-green-100 text-green-700",
               s.status === "PAUSED" && "bg-gray-200 text-gray-600",
               s.status === "MATCHED" && "bg-crimson-tint text-crimson-dark",
+              s.status === "BOOKED" && "bg-blue-tint text-blue",
               s.status === "EXPIRED" && "bg-gray-100 text-gray-400",
             )}
           >
@@ -134,7 +142,7 @@ function SearchCard({ s }: { s: SearchVM }) {
         </div>
       </div>
 
-      {matched && (
+      {matched && s.status !== "BOOKED" && (
         <div className="mt-3 space-y-2 rounded-xl bg-crimson-tint/60 p-3">
           {s.notifications.slice(0, 3).map((n) => (
             <div key={n.id} className="flex items-center justify-between text-xs">
@@ -153,6 +161,14 @@ function SearchCard({ s }: { s: SearchVM }) {
         </div>
       )}
 
+      {s.status === "BOOKED" && s.booking && (
+        <div className="mt-3 rounded-xl bg-blue-tint p-3 text-xs text-blue">
+          <BookingLine booking={s.booking} />
+        </div>
+      )}
+
+      {error && <p className="mt-2 text-xs text-crimson">{error}</p>}
+
       <div className="mt-3 flex gap-2 text-xs">
         {s.status === "EXPIRED" ? (
           <button
@@ -162,7 +178,7 @@ function SearchCard({ s }: { s: SearchVM }) {
           >
             Reactivate
           </button>
-        ) : (
+        ) : s.status === "BOOKED" ? null : (
           <button
             onClick={() => start(() => void pauseSearch(s.id))}
             disabled={pending}
@@ -178,17 +194,58 @@ function SearchCard({ s }: { s: SearchVM }) {
         >
           Delete
         </button>
-        {s.course.bookingUrl && (
-          <a
-            href={s.course.bookingUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto rounded-full bg-crimson px-3 py-1.5 font-medium text-white"
+        {s.status === "MATCHED" && (
+          <button
+            onClick={() =>
+              start(async () => {
+                setError(null);
+                const r = await bookMatchedSlot(s.id);
+                if (!r.ok) setError(r.error ?? "Couldn't book that tee time.");
+              })
+            }
+            disabled={pending}
+            className="ml-auto rounded-full bg-crimson px-3 py-1.5 font-medium text-white disabled:opacity-60"
           >
-            Book now
-          </a>
+            {pending ? "Booking…" : "Book now"}
+          </button>
         )}
       </div>
     </li>
   );
+}
+
+function BookingLine({
+  booking,
+}: {
+  booking: { teeAt: string; priceCents: number; confirmStatus: string | null };
+}) {
+  const when = new Date(booking.teeAt).toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
+  const price = formatDollars(booking.priceCents);
+  switch (booking.confirmStatus) {
+    case "CONFIRMED":
+      return <>✓ Confirmed — {when} · {price}. See you on the course.</>;
+    case "AWAITING_CONFIRMATION":
+      return (
+        <>
+          ✓ Booked — {when}. Confirm it in your{" "}
+          <a href="/dev/outbox" className="font-semibold underline">
+            Dev Outbox
+          </a>
+          .
+        </>
+      );
+    case "CANCELED":
+      return <>Released — this slot went back to other golfers.</>;
+    case "MODIFY_REQUESTED":
+      return <>Released — you asked to change the time.</>;
+    default:
+      return <>✓ Booked — {when} · {price}. We&apos;ll ask you to confirm before your round.</>;
+  }
 }

@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-import { SEARCH_STATUS } from "@/lib/constants";
+import { SEARCH_STATUS, TEE_STATUS, CONFIRM_STATUS } from "@/lib/constants";
 import { dateAtMidnight } from "@/lib/time";
 import { ensureSheetsAround } from "@/lib/simulator/engine";
 import { parseSearchPrompt, type ParseResult } from "@/lib/ai/parse-search";
@@ -105,6 +105,50 @@ async function ownSearch(id: string) {
   if (!user) return null;
   const s = await db.search.findUnique({ where: { id } });
   return s && s.userId === user.id ? s : null;
+}
+
+/**
+ * Book the tee time a search most recently matched. Demo-only "booking": the
+ * golfer takes the slot (TeeTime.bookedByUserId), it flips to BOOKED + confirm
+ * status PENDING, and the search is done (SEARCH_STATUS.BOOKED). If the slot is
+ * inside the Confirm window the next simulator tick sends the one pre-round
+ * confirmation nudge (see the Confirm flow).
+ */
+export async function bookMatchedSlot(searchId: string): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, needsAuth: true, error: "Log in to book." };
+
+  const search = await db.search.findUnique({
+    where: { id: searchId },
+    include: { notifications: { orderBy: { sentAt: "desc" }, take: 1 } },
+  });
+  if (!search || search.userId !== user.id) return { ok: false, error: "Search not found." };
+
+  const slotId = search.notifications[0]?.teeTimeId;
+  if (!slotId) return { ok: false, error: "Nothing has matched this search yet." };
+
+  const slot = await db.teeTime.findUnique({ where: { id: slotId } });
+  if (!slot) return { ok: false, error: "That tee time is no longer on the sheet." };
+  if (slot.status !== TEE_STATUS.OPEN || slot.bookedByUserId) {
+    return { ok: false, error: "That tee time was just taken — another search may catch the next one." };
+  }
+
+  await db.teeTime.update({
+    where: { id: slot.id },
+    data: {
+      status: TEE_STATUS.BOOKED,
+      bookedByUserId: user.id,
+      confirmStatus: CONFIRM_STATUS.PENDING,
+      confirmToken: null,
+      confirmRequestedAt: null,
+      confirmRespondedAt: null,
+    },
+  });
+  await db.search.update({ where: { id: search.id }, data: { status: SEARCH_STATUS.BOOKED } });
+
+  revalidatePath("/searches");
+  revalidatePath("/dev/outbox");
+  return { ok: true };
 }
 
 export async function pauseSearch(id: string) {

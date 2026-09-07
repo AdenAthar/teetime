@@ -11,19 +11,25 @@ The real company sells a few products. After researching them, what this app
 recreates is **Confirm** — pre-round confirmation and cancellation recapture —
 *not* Waitlist (their separate always-on golfer search-and-notify product).
 
-**Confirm (primary):** a course has a tee sheet full of real bookings. 24–48 h
-before each booking, the system messages that golfer to **confirm, cancel, or
-modify**. If they cancel — or never respond by a cutoff a few hours before
-tee-off — that slot is released *immediately*, and only then does the
-Waitlist-style matcher fill it from other golfers' searches. Revenue logic:
-courses lose money on no-shows and late cancellations; Confirm surfaces them
-early enough to resell the slot.
+**Confirm (primary):** a course has a tee sheet full of real bookings. Up to
+48 h before each booking (and down to ~3 h for short-notice ones), the system
+messages that golfer to **confirm, cancel, or modify**. If they cancel — or never
+respond by a cutoff a few hours before tee-off — that slot is released
+*immediately*, and only then does the Waitlist-style matcher fill it from other
+golfers' searches. Revenue logic: courses lose money on no-shows and late
+cancellations; Confirm surfaces them early enough to resell the slot.
 
 **Waitlist (secondary, retained):** a golfer creates a **search** (course +
 date + time window + party size, optionally recurring). When a slot matching an
 active search opens up, the golfer gets an email/SMS with a booking link. This
 still exists as a real, useful mechanic in its own right — and it's the thing
 that *refills* a slot the moment Confirm frees one.
+
+**The two connect.** A Waitlist match has a working **Book now** (demo booking —
+no payment, no real tee sheet): the golfer takes the slot, it becomes theirs
+(`TeeTime.bookedByUserId`), and if it's inside the 48 h window the next tick sends
+*that* golfer their one Confirm nudge — confirmable inline from the Dev Outbox.
+So one account can walk the whole loop: search → match → book → confirm.
 
 Supporting surface: a ~1,000-course directory + map, account/profile,
 notification preferences, searches list. Auth is passwordless (email or phone OTP).
@@ -42,8 +48,10 @@ proprietary and unreplicable. So the central move is a **fake tee-sheet provider
   stays small. `FULL_SHEETS=1 npm run db:seed` pre-generates all ~1M for local dev.
 - A **churn tick** (`tick()`, cranked by `/api/tick`) does, in order:
   1. **Confirm — send nudges:** any `TeeTime` with a real golfer attached
-     (`bookedByUserId` set, `confirmStatus: PENDING`) that's now 24–48 h out gets
-     a "please confirm" notification and moves to `AWAITING_CONFIRMATION`.
+     (`bookedByUserId` set, `confirmStatus: PENDING`) that's now 3–48 h out gets
+     a "please confirm" notification and moves to `AWAITING_CONFIRMATION`. The
+     golfer got there either from the seed's demo booking or by hitting **Book
+     now** on a Waitlist match.
   2. **Confirm — auto-release:** an `AWAITING_CONFIRMATION` booking still
      unanswered within 3 h of tee-off is released (`status: OPEN`), same as an
      explicit cancel, then handed to the matcher.
@@ -116,6 +124,7 @@ Next.js 16 (App Router) — one deployable
 | 16 | **Mouse-wheel over the map** | always-on scroll-zoom / ctrl+scroll gate / click-to-activate | **Click-to-activate ("cooperative gesture handling")** — the same convention Google Maps embeds default to (that "©2026 Google" attribution on Noteefy's map is the tell). Scroll-zoom stays off until you click into the map; a plain scroll before that just scrolls the page (never trapped, header hide-on-scroll unaffected); moving the cursor off the map re-disarms it. Tried always-on plain scroll first — it reproduces Noteefy's *end state* but traps any scroll gesture that starts over the map, which sits right under the header, so it kept reading as "scrolling is broken." Also tried ctrl+scroll, which solves the trap but isn't what Noteefy's real embed requires. |
 | 17 | **Primary mechanic: Confirm vs Waitlist** | model the golfer-initiated always-on search (Waitlist) / model pre-round confirmation + automatic recapture (Confirm) | **Confirm, with Waitlist retained as the refill mechanic.** The first build was pure Waitlist — a golfer sets a search and waits for a slot to open. But researching the real product line, the mechanics I'd actually built (a course-side tee sheet, cancellations freeing slots, notifications firing on the *transition*) map to **Confirm**: the course proactively nudges each booked golfer 24–48 h out; a cancel or a non-response releases the slot; only *then* does search-matching fill it. Confirm is course-initiated and booking-attached (`TeeTime.bookedByUserId` + `confirmStatus`); Waitlist is golfer-initiated and search-attached (`Search`). Modelled Confirm as the primary flow and kept Waitlist because (a) it's a real second product and (b) it's literally what recaptures the freed slot. Modelling booking-ownership as fields on `TeeTime` rather than a separate `Booking` table was deliberate — smaller, reviewable diff, and a slot only ever has one holder. |
 | 18 | **Natural-language search** | LLM parses *and* creates the search (an agent) / LLM only parses, human submits | **Parse only.** The bottom-right popup (§9) sends the prompt to Claude with one forced tool call that returns structured fields — course text, date range, time window, party size — and nothing else. The server resolves the course against Postgres itself and expands the date range with the app's own UTC helpers; the golfer reviews pre-filled draft cards and submits each through the unchanged `createSearch`. The model never sees a course id, never writes, and a bad/absent key just hides the box. This keeps the LLM on the one job it's good at (fuzzy intent → structure) and off the jobs the app already does deterministically. |
+| 19 | **"Book now" on a match** | dead placeholder link / real payment+tee-sheet integration / demo booking | **Demo booking.** No payment and no real tee sheet to write to, but the click does real work: `TeeTime` → `BOOKED` + `bookedByUserId` + `confirmStatus: PENDING`, `Search` → `BOOKED`. That's exactly the state a real integration would leave behind, so the *rest* of the system (the Confirm nudge, auto-release, the outbox) runs unchanged. Booking-ownership lives on `TeeTime` (rows 17), so there's no separate `Booking` entity to reconcile. Lets one demo account show the full search → match → book → confirm loop instead of the seed having to hand-place a booking. |
 
 ---
 
@@ -126,7 +135,7 @@ User      id, firstName, lastName, email(unique), phone?, zip?, birthday?, gende
           notifyEmail, notifyText, notifyPrompts, createdAt
 Course    id, name, slug(unique), city?, region, country, lat, lng, bookingUrl?, provider?
 Search    id, userId, courseId, date, startMin, endMin, players, holes,
-          status "ACTIVE|PAUSED|MATCHED|EXPIRED", recurring, daysOfWeek (json), createdAt, lastCheckedAt
+          status "ACTIVE|PAUSED|MATCHED|BOOKED|EXPIRED", recurring, daysOfWeek (json), createdAt, lastCheckedAt
 TeeTime   id, courseId, teeAt, players, priceCents, holes, status "OPEN|BOOKED", updatedAt,
           -- Confirm: null unless a real golfer holds this slot --
           bookedByUserId?, confirmStatus? "PENDING|AWAITING_CONFIRMATION|CONFIRMED|CANCELED|MODIFY_REQUESTED",

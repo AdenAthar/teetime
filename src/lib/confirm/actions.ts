@@ -5,11 +5,17 @@
 // as clicking a confirm link in an email — so these don't go through
 // requireUser()/getCurrentUser().
 
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { CONFIRM_STATUS, TEE_STATUS } from "@/lib/constants";
 import { runMatcher } from "@/lib/simulator/engine";
 
 type Result = { ok: boolean; error?: string };
+
+function revalidate() {
+  revalidatePath("/dev/outbox");
+  revalidatePath("/searches");
+}
 
 async function findByToken(token: string) {
   return db.teeTime.findUnique({
@@ -31,6 +37,7 @@ export async function confirmBooking(token: string): Promise<Result> {
     where: { id: t.id },
     data: { confirmStatus: CONFIRM_STATUS.CONFIRMED, confirmRespondedAt: new Date() },
   });
+  revalidate();
   return { ok: true };
 }
 
@@ -50,6 +57,7 @@ export async function cancelBooking(token: string): Promise<Result> {
     include: { course: true },
   });
   await runMatcher(db, opened);
+  revalidate();
   return { ok: true };
 }
 
@@ -74,5 +82,6 @@ export async function modifyBooking(token: string): Promise<Result> {
     include: { course: true },
   });
   await runMatcher(db, opened);
+  revalidate();
   return { ok: true };
 }

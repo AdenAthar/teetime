@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import { TickButton } from "@/components/tick-button";
+import { OutboxConfirmActions } from "@/components/outbox-confirm-actions";
 import { TEE_STATUS, NOTIFICATION_KIND } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,12 @@ export default async function OutboxPage() {
             <pre className="mt-2 whitespace-pre-wrap font-sans text-xs text-foreground/80">
               {n.body}
             </pre>
+            {isConfirm && (
+              <OutboxConfirmActions
+                token={n.teeTime.confirmToken}
+                status={n.teeTime.confirmStatus}
+              />
+            )}
           </li>
           );
         })}

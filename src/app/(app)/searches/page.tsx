@@ -14,7 +14,11 @@ export default async function SearchesPage() {
       course: { select: { name: true, region: true, bookingUrl: true } },
       notifications: {
         orderBy: { sentAt: "desc" },
-        include: { teeTime: { select: { teeAt: true, priceCents: true } } },
+        include: {
+          teeTime: {
+            select: { teeAt: true, priceCents: true, status: true, confirmStatus: true },
+          },
+        },
       },
     },
   });
@@ -38,6 +42,16 @@ export default async function SearchesPage() {
       teeAt: n.teeTime.teeAt.toISOString(),
       priceCents: n.teeTime.priceCents,
     })),
+    // The slot this search booked (its latest match), if any — for the card's
+    // booked/confirmed state.
+    booking:
+      s.status === "BOOKED" && s.notifications[0]
+        ? {
+            teeAt: s.notifications[0].teeTime.teeAt.toISOString(),
+            priceCents: s.notifications[0].teeTime.priceCents,
+            confirmStatus: s.notifications[0].teeTime.confirmStatus,
+          }
+        : null,
   }));
 
   return (
