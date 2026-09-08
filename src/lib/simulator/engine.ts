@@ -204,8 +204,15 @@ export async function tick(
   res.rearmed += rearm.count;
 
   // --- cancellations ---
+  // `bookedByUserId: null` everywhere in the churn steps: the simulator models
+  // *ambient* course activity and must not touch a real golfer's booking (those
+  // are handled by the Confirm steps above / the golfer's own actions).
   const booked = await db.teeTime.findMany({
-    where: { status: TEE_STATUS.BOOKED, teeAt: { gt: new Date(now.getTime() + 3_600_000), lt: horizon } },
+    where: {
+      status: TEE_STATUS.BOOKED,
+      bookedByUserId: null,
+      teeAt: { gt: new Date(now.getTime() + 3_600_000), lt: horizon },
+    },
     take: 400,
     select: { id: true },
   });
@@ -249,6 +256,7 @@ export async function tick(
       where: {
         courseId: search.courseId,
         status: TEE_STATUS.BOOKED,
+        bookedByUserId: null,
         id: { notIn: seen.map((n) => n.teeTimeId) },
         teeAt: {
           gte: new Date(Math.max(windowStart.getTime(), now.getTime() + 3_600_000)),
@@ -280,7 +288,7 @@ export async function tick(
   ]);
   const rebookBudget = Math.max(0, openNow - Math.ceil(totalFuture * SIM_OPEN_FLOOR_FRACTION));
   const open = await db.teeTime.findMany({
-    where: { status: TEE_STATUS.OPEN, ...futureSlot },
+    where: { status: TEE_STATUS.OPEN, bookedByUserId: null, ...futureSlot },
     take: 400,
     select: { id: true },
   });
@@ -361,14 +369,17 @@ export async function sendConfirmationRequests(db: PrismaClient, now = new Date(
   for (const t of due) {
     if (!t.bookedBy) continue;
     const token = globalThis.crypto.randomUUID();
-    await db.teeTime.update({
-      where: { id: t.id },
+    // Guard on PENDING so two concurrent ticks can't both mint a token / send
+    // two nudges for the same booking.
+    const claimed = await db.teeTime.updateMany({
+      where: { id: t.id, confirmStatus: CONFIRM_STATUS.PENDING },
       data: {
         confirmStatus: CONFIRM_STATUS.AWAITING_CONFIRMATION,
         confirmToken: token,
         confirmRequestedAt: now,
       },
     });
+    if (claimed.count === 0) continue;
     await sendConfirmationRequest(db, { teeTime: t, user: t.bookedBy, token });
     sent++;
   }
@@ -396,13 +407,16 @@ export async function autoReleaseUnconfirmedBookings(db: PrismaClient, now = new
   let matches = 0;
   let notifications = 0;
   for (const t of stale) {
-    const opened = await db.teeTime.update({
-      where: { id: t.id },
-      data: { status: TEE_STATUS.OPEN, confirmStatus: CONFIRM_STATUS.CANCELED },
-      include: { course: true },
+    // Guard on AWAITING_CONFIRMATION: if the golfer just confirmed/cancelled, or
+    // another tick already released it, count 0 and skip. Clears the holder too.
+    const claimed = await db.teeTime.updateMany({
+      where: { id: t.id, confirmStatus: CONFIRM_STATUS.AWAITING_CONFIRMATION },
+      data: { status: TEE_STATUS.OPEN, confirmStatus: CONFIRM_STATUS.CANCELED, bookedByUserId: null },
     });
+    if (claimed.count === 0) continue;
     released++;
-    const m = await runMatcher(db, opened);
+    // `t` already carries `course`; release doesn't change any match-relevant field.
+    const m = await runMatcher(db, t);
     matches += m.matches;
     notifications += m.notifications;
   }

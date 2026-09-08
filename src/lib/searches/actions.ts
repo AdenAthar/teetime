@@ -133,12 +133,16 @@ export async function bookMatchedSlot(searchId: string): Promise<Result> {
     include: { course: { select: { name: true, region: true } } },
   });
   if (!slot) return { ok: false, error: "That tee time is no longer on the sheet." };
-  if (slot.status !== TEE_STATUS.OPEN || slot.bookedByUserId) {
-    return { ok: false, error: "That tee time was just taken — another search may catch the next one." };
-  }
+  const taken = { ok: false as const, error: "That tee time was just taken — another search may catch the next one." };
+  if (slot.status !== TEE_STATUS.OPEN || slot.bookedByUserId) return taken;
 
-  await db.teeTime.update({
-    where: { id: slot.id },
+  // Atomic claim: the WHERE re-checks OPEN + unbooked under a row lock, so of two
+  // golfers racing for the same freed slot exactly one update matches. The other
+  // gets count 0 — no clobbered bookedByUserId, no phantom receipt. (The slot's
+  // immutable fields — course, teeAt, price — are still safe to read from `slot`
+  // for the receipt below.)
+  const claimed = await db.teeTime.updateMany({
+    where: { id: slotId, status: TEE_STATUS.OPEN, bookedByUserId: null },
     data: {
       status: TEE_STATUS.BOOKED,
       bookedByUserId: user.id,
@@ -148,6 +152,8 @@ export async function bookMatchedSlot(searchId: string): Promise<Result> {
       confirmRespondedAt: null,
     },
   });
+  if (claimed.count === 0) return taken;
+
   await db.search.update({ where: { id: search.id }, data: { status: SEARCH_STATUS.BOOKED } });
 
   // Booking receipt lands in the outbox now; the reconfirm nudge comes later.
