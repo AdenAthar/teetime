@@ -161,6 +161,11 @@ between Postgres and SQLite; constants live in `src/lib/constants.ts`.
 - ~350 courses are placed by state centroid, not exact address; a few land in water.
 - SMS is recorded but not delivered.
 - Auth-page background is generated art, not Noteefy's photo.
+- **Matching is transition-only.** `createSearch` writes the row and generates the
+  sheet but runs no matching; `runMatcher` only ever fires on a slot that just
+  flipped `OPEN`. So a new search doesn't get checked against slots that are
+  *already* open — the first hit waits for the next tick. A real product would
+  scan on creation.
 - **Confirm** is scoped: one fixed auto-release cutoff (3 h), non-configurable
   reminder timing, `confirmToken` never expires, and "modify" is simplified to
   "release the slot + go set up a Waitlist search" rather than true rescheduling.
