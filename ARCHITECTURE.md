@@ -142,7 +142,7 @@ TeeTime   id, courseId, teeAt, players, priceCents, holes, status "OPEN|BOOKED",
           confirmToken?(unique), confirmRequestedAt?, confirmRespondedAt?
           @@unique(courseId, teeAt)
 Notification id, userId, searchId?, teeTimeId, channel "EMAIL|TEXT",
-          kind "MATCH|CONFIRM_REQUEST" (searchId null when CONFIRM_REQUEST),
+          kind "MATCH|BOOKING|CONFIRM_REQUEST",
           subject, body, provider "DEV|RESEND|TWILIO", sentAt, readAt?
 OtpToken  id, identifier, channel, codeHash (sha256), expiresAt, consumedAt?, createdAt
 Session   id, userId, expiresAt, createdAt

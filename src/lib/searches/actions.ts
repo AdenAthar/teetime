@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { SEARCH_STATUS, TEE_STATUS, CONFIRM_STATUS } from "@/lib/constants";
 import { dateAtMidnight } from "@/lib/time";
 import { ensureSheetsAround } from "@/lib/simulator/engine";
+import { sendBookingConfirmation } from "@/lib/notify";
 import { parseSearchPrompt, type ParseResult } from "@/lib/ai/parse-search";
 import { checkAiRateLimit, recordAiRequest } from "@/lib/ai/rate-limit";
 
@@ -127,7 +128,10 @@ export async function bookMatchedSlot(searchId: string): Promise<Result> {
   const slotId = search.notifications[0]?.teeTimeId;
   if (!slotId) return { ok: false, error: "Nothing has matched this search yet." };
 
-  const slot = await db.teeTime.findUnique({ where: { id: slotId } });
+  const slot = await db.teeTime.findUnique({
+    where: { id: slotId },
+    include: { course: { select: { name: true, region: true } } },
+  });
   if (!slot) return { ok: false, error: "That tee time is no longer on the sheet." };
   if (slot.status !== TEE_STATUS.OPEN || slot.bookedByUserId) {
     return { ok: false, error: "That tee time was just taken — another search may catch the next one." };
@@ -145,6 +149,9 @@ export async function bookMatchedSlot(searchId: string): Promise<Result> {
     },
   });
   await db.search.update({ where: { id: search.id }, data: { status: SEARCH_STATUS.BOOKED } });
+
+  // Booking receipt lands in the outbox now; the reconfirm nudge comes later.
+  await sendBookingConfirmation(db, { search: { id: search.id }, teeTime: slot, user });
 
   revalidatePath("/searches");
   revalidatePath("/dev/outbox");

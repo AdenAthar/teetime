@@ -33,6 +33,7 @@ function buildMessage(a: AlertInput) {
     weekday: "short",
     month: "short",
     day: "numeric",
+    timeZone: "UTC", // slot day/time math is UTC everywhere — keep the copy matching
   });
   const time = minutesToLabel(minutesFromMidnight(teeTime.teeAt));
   const subject = `Tee time available: ${teeTime.course.name} — ${when} at ${time}`;
@@ -94,6 +95,76 @@ export async function sendAlert(db: PrismaClient, a: AlertInput): Promise<number
         teeTimeId: a.teeTime.id,
         channel,
         kind: NOTIFICATION_KIND.MATCH,
+        subject,
+        body,
+        provider,
+      },
+    });
+    count++;
+  }
+  return count;
+}
+
+type BookingInput = {
+  search: { id: string };
+  teeTime: {
+    id: string;
+    teeAt: Date;
+    players: number;
+    holes: number;
+    priceCents: number;
+    course: { name: string; region: string };
+  };
+  user: {
+    id: string;
+    firstName: string;
+    email: string;
+    phone: string | null;
+    notifyEmail: boolean;
+    notifyText: boolean;
+  };
+};
+
+/**
+ * Booking receipt — fired the moment a golfer takes a slot via "Book now". Not a
+ * match and not the pre-round nudge; just "you're booked". The reconfirm nudge
+ * comes later from the simulator when the slot enters the Confirm window.
+ */
+export async function sendBookingConfirmation(db: PrismaClient, a: BookingInput): Promise<number> {
+  const { teeTime } = a;
+  const when = teeTime.teeAt.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const time = minutesToLabel(minutesFromMidnight(teeTime.teeAt));
+  const subject = `Booking confirmed: ${teeTime.course.name} — ${when} at ${time}`;
+  const body =
+    `Hi ${a.user.firstName},\n\n` +
+    `You're booked:\n\n` +
+    `  ${teeTime.course.name} (${teeTime.course.region})\n` +
+    `  ${when} at ${time}\n` +
+    `  ${teeTime.players} player(s) · ${teeTime.holes} holes · ${formatDollars(teeTime.priceCents)}/player\n\n` +
+    `We'll send a quick reminder to reconfirm 1–2 days before your round. ` +
+    `You can see this booking any time in My Searches.`;
+
+  const channels: string[] = [];
+  if (a.user.notifyEmail) channels.push(CHANNEL.EMAIL);
+  if (a.user.notifyText && a.user.phone) channels.push(CHANNEL.TEXT);
+  if (channels.length === 0) channels.push(CHANNEL.EMAIL);
+
+  let count = 0;
+  for (const channel of channels) {
+    let provider = "DEV";
+    if (channel === CHANNEL.EMAIL) provider = await deliverEmail(a.user.email, subject, body);
+    await db.notification.create({
+      data: {
+        userId: a.user.id,
+        searchId: a.search.id,
+        teeTimeId: a.teeTime.id,
+        channel,
+        kind: NOTIFICATION_KIND.BOOKING,
         subject,
         body,
         provider,

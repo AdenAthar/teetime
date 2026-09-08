@@ -104,6 +104,7 @@ function SearchCard({ s }: { s: SearchVM }) {
     weekday: "long",
     month: "long",
     day: "numeric",
+    timeZone: "UTC",
   });
   const matched = s.status === "MATCHED" || s.notifications.length > 0;
 
@@ -152,6 +153,7 @@ function SearchCard({ s }: { s: SearchVM }) {
                   weekday: "short",
                   hour: "numeric",
                   minute: "2-digit",
+                  timeZone: "UTC",
                 })}{" "}
                 · {formatDollars(n.priceCents)}
               </span>

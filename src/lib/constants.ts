@@ -23,10 +23,11 @@ export const CONFIRM_STATUS = {
 } as const;
 export type ConfirmStatus = (typeof CONFIRM_STATUS)[keyof typeof CONFIRM_STATUS];
 
-/** Distinguishes a Confirm pre-round nudge from a Waitlist "slot opened" alert. */
+/** What a Notification row is about. */
 export const NOTIFICATION_KIND = {
-  MATCH: "MATCH",
-  CONFIRM_REQUEST: "CONFIRM_REQUEST",
+  MATCH: "MATCH", // Waitlist: a slot matching your search opened up
+  BOOKING: "BOOKING", // receipt: you just booked a slot
+  CONFIRM_REQUEST: "CONFIRM_REQUEST", // Confirm: pre-round "still coming?" nudge
 } as const;
 export type NotificationKind = (typeof NOTIFICATION_KIND)[keyof typeof NOTIFICATION_KIND];
 

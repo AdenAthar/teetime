@@ -47,19 +47,17 @@ export default async function OutboxPage() {
         {notifications.map((n) => {
           const courseName = n.search?.course.name ?? n.teeTime.course.name;
           const isConfirm = n.kind === NOTIFICATION_KIND.CONFIRM_REQUEST;
+          const tag =
+            n.kind === NOTIFICATION_KIND.CONFIRM_REQUEST
+              ? { label: "CONFIRM", cls: "text-crimson" }
+              : n.kind === NOTIFICATION_KIND.BOOKING
+                ? { label: "BOOKED", cls: "text-green-700" }
+                : { label: "WAITLIST", cls: "text-blue" };
           return (
           <li key={n.id} className="rounded-xl border border-border bg-surface p-4">
             <div className="flex items-center justify-between text-xs text-muted">
               <span>
-                <span
-                  className={
-                    isConfirm
-                      ? "font-semibold text-crimson"
-                      : "font-semibold text-blue"
-                  }
-                >
-                  {isConfirm ? "CONFIRM" : "WAITLIST"}
-                </span>{" "}
+                <span className={`font-semibold ${tag.cls}`}>{tag.label}</span>{" "}
                 · {n.channel} · {n.provider} · {courseName}
               </span>
               <span>{n.sentAt.toLocaleString()}</span>
